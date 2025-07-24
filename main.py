@@ -36,19 +36,14 @@ def menu_gestion_inventario(usuario: str):
             opciones_disponibles.append("Ver Inventario en Excel")
         
         if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]:
-            # Consultar cantidad de pendientes
             mantenimientos_pendientes = len([e for e in db_manager.get_all_equipos() if e.get('estado') == "En mantenimiento"])
             devoluciones_pendientes = len([e for e in db_manager.get_all_equipos() if e.get('estado') == "Pendiente Devolución a Proveedor"])
             total_pendientes = mantenimientos_pendientes + devoluciones_pendientes
             
-            # Asignar color según la cantidad
             color = Fore.GREEN
-            if total_pendientes == 1:
-                color = Fore.YELLOW
-            elif total_pendientes > 1:
-                color = Fore.RED
+            if total_pendientes > 0:
+                color = Fore.YELLOW if total_pendientes == 1 else Fore.RED
             
-            # Formatear texto del menú
             texto_menu_pendientes = f"Gestionar Mantenimientos y Devoluciones {color}({total_pendientes} Pendientes){Style.RESET_ALL}"
             opciones_disponibles.append(texto_menu_pendientes)
 
@@ -61,12 +56,23 @@ def menu_gestion_inventario(usuario: str):
             opciones_map = {str(i+1): texto for i, texto in enumerate(opciones_disponibles)}
             opcion_texto = opciones_map.get(opcion_input)
 
-            if opcion_texto == "Registrar nuevo equipo": registrar_equipo(usuario)
-            elif opcion_texto == "Gestionar Equipos": gestionar_equipos(usuario)
-            elif opcion_texto == "Ver Inventario en Excel": menu_ver_inventario_excel(usuario)
-            elif opcion_texto and "Gestionar Mantenimientos y Devoluciones" in opcion_texto:
+            if not opcion_texto:
+                print(Fore.RED + "Opción no válida.")
+                pausar_pantalla()
+                continue
+
+            # --- CORRECCIÓN APLICADA AQUÍ ---
+            # Se usa 'in' para que funcione aunque el texto tenga contadores dinámicos
+            if "Registrar nuevo equipo" in opcion_texto:
+                registrar_equipo(usuario)
+            elif "Gestionar Equipos" in opcion_texto:
+                gestionar_equipos(usuario)
+            elif "Ver Inventario en Excel" in opcion_texto:
+                menu_ver_inventario_excel(usuario)
+            elif "Gestionar Mantenimientos y Devoluciones" in opcion_texto:
                 menu_gestionar_pendientes(usuario)
-            elif opcion_texto == "Volver al menú principal": break
+            elif "Volver al menú principal" in opcion_texto:
+                break
             else: 
                 print(Fore.RED + "Opción no válida.")
                 pausar_pantalla()

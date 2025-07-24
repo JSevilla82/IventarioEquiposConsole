@@ -24,3 +24,21 @@ def mostrar_menu(opciones: List[str], titulo: str):
 def pausar_pantalla():
     """Pausa la ejecución hasta que el usuario presione Enter."""
     input(Fore.CYAN + "\nPresione Enter para continuar..." + Style.RESET_ALL)
+
+def confirmar_con_placa(placa_correcta: str) -> bool:
+    """
+    Pide al usuario que reingrese la placa para confirmar.
+    Permite múltiples intentos y una opción para cancelar.
+    """
+    while True:
+        print(Fore.CYAN + "💡 Escriba 'C' para cancelar la operación." + Style.RESET_ALL)
+        confirmacion_placa = input(Fore.YELLOW + "🔑 Para confirmar, ingrese la placa del equipo: " + Style.RESET_ALL).strip().upper()
+        
+        if confirmacion_placa == placa_correcta:
+            return True
+        elif confirmacion_placa == 'C':
+            print(Fore.YELLOW + "\n🚫 Operación cancelada por el usuario." + Style.RESET_ALL)
+            pausar_pantalla()
+            return False
+        else:
+            print(Fore.RED + "\n❌ Placa incorrecta. Por favor, intente de nuevo.")

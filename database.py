@@ -72,6 +72,7 @@ class DatabaseManager:
         try:
             self.conn = sqlite3.connect(self.db_name)
             self.conn.row_factory = sqlite3.Row
+            self.conn.execute("PRAGMA foreign_keys = ON")
         except sqlite3.Error as e:
             print(Fore.RED + f"❌ Error al conectar a la base de datos: {e}" + Style.RESET_ALL)
             exit()
@@ -96,7 +97,7 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS log_inventario (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, equipo_placa TEXT NOT NULL,
                 accion TEXT NOT NULL, detalles TEXT NOT NULL, usuario TEXT NOT NULL, fecha TEXT NOT NULL,
-                FOREIGN KEY (equipo_placa) REFERENCES equipos (placa)
+                FOREIGN KEY (equipo_placa) REFERENCES equipos (placa) ON DELETE CASCADE
             )
         ''')
         cursor.execute('''
@@ -125,7 +126,6 @@ class DatabaseManager:
         self.conn.commit()
 
     def add_missing_columns(self):
-        # ... (código sin cambios) ...
         columns_to_add = {
             'equipos': [
                 ('fecha_devolucion_prestamo', 'TEXT'),
@@ -171,6 +171,28 @@ class DatabaseManager:
         cursor = self.execute_query('SELECT * FROM equipos')
         return [dict(row) for row in cursor.fetchall()]
 
+    def get_equipos_activos(self) -> List[Dict]:
+        cursor = self.execute_query("SELECT * FROM equipos WHERE estado != 'Devuelto a Proveedor'")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_equipos_devueltos(self) -> List[Dict]:
+        cursor = self.execute_query("SELECT * FROM equipos WHERE estado = 'Devuelto a Proveedor'")
+        return [dict(row) for row in cursor.fetchall()]
+        
+    def get_new_equipos(self) -> List[Dict]:
+        """Obtiene equipos que solo tienen un movimiento en el log (su registro)."""
+        query = """
+            SELECT e.* FROM equipos e
+            JOIN (
+                SELECT equipo_placa, COUNT(id) as count
+                FROM log_inventario
+                GROUP BY equipo_placa
+            ) AS log_counts ON e.placa = log_counts.equipo_placa
+            WHERE log_counts.count = 1 AND e.estado = 'Disponible'
+        """
+        cursor = self.execute_query(query)
+        return [dict(row) for row in cursor.fetchall()]
+
     def get_equipo_by_placa(self, placa: str) -> Optional[Dict]:
         cursor = self.execute_query('SELECT * FROM equipos WHERE placa = ?', (placa,))
         row = cursor.fetchone()
@@ -196,6 +218,16 @@ class DatabaseManager:
             INSERT INTO log_inventario (equipo_placa, accion, detalles, usuario, fecha) VALUES (?, ?, ?, ?, ?)
         ''', (log.equipo_placa, log.accion, log.detalles, log.usuario, log.fecha))
         self.commit()
+
+    def count_movimientos_by_placa(self, placa: str) -> int:
+        cursor = self.execute_query('SELECT COUNT(id) FROM log_inventario WHERE equipo_placa = ?', (placa,))
+        result = cursor.fetchone()
+        return result[0] if result else 0
+        
+    def get_log_by_placa(self, placa: str) -> List[Dict]:
+        """Obtiene todo el historial de movimientos para una placa específica."""
+        cursor = self.execute_query('SELECT * FROM log_inventario WHERE equipo_placa = ? ORDER BY fecha DESC', (placa,))
+        return [dict(row) for row in cursor.fetchall()]
 
     def insert_log_sistema(self, log: LogSistema):
         self.execute_query('''
