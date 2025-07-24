@@ -247,6 +247,28 @@ class DatabaseManager:
         cursor = self.execute_query('SELECT * FROM log_inventario WHERE equipo_placa = ? ORDER BY fecha DESC LIMIT 1', (placa,))
         row = cursor.fetchone()
         return dict(row) if row else None
+        
+    def get_last_movimientos_by_user(self, usuario: str, limit: int = 10) -> List[Dict]:
+        """Obtiene los últimos movimientos de inventario realizados por un usuario específico."""
+        query = """
+            SELECT
+                li.fecha,
+                li.equipo_placa,
+                e.marca,
+                li.accion,
+                li.detalles
+            FROM
+                log_inventario li
+            LEFT JOIN
+                equipos e ON li.equipo_placa = e.placa
+            WHERE
+                li.usuario = ?
+            ORDER BY
+                li.fecha DESC
+            LIMIT ?
+        """
+        cursor = self.execute_query(query, (usuario, limit))
+        return [dict(row) for row in cursor.fetchall()]
 
     # --- Métodos para Usuarios ---
     def insert_user(self, user: Usuario):

@@ -2,6 +2,7 @@
 import os
 from colorama import Fore, Back, Style
 from dotenv import load_dotenv
+from datetime import datetime
 
 from database import db_manager
 from ui import (
@@ -9,7 +10,7 @@ from ui import (
 )
 from gestion_inventario import (
     registrar_equipo, gestionar_equipos, menu_ver_inventario_excel,
-    menu_gestionar_pendientes
+    menu_gestionar_pendientes, menu_ver_ultimos_movimientos # <-- Se importa la nueva función
 )
 from gestion_acceso import (
     login, menu_usuarios, menu_configuracion_sistema,
@@ -25,6 +26,7 @@ def menu_gestion_inventario(usuario: str):
     
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
+
         opciones_disponibles = []
         
         # Construcción dinámica del menú
@@ -46,7 +48,9 @@ def menu_gestion_inventario(usuario: str):
             
             texto_menu_pendientes = f"Gestionar Mantenimientos y Devoluciones {color}({total_pendientes} Pendientes){Style.RESET_ALL}"
             opciones_disponibles.append(texto_menu_pendientes)
-
+        
+        # Se añade la nueva opción al menú
+        opciones_disponibles.append("Ver últimos 20 movimientos")
         opciones_disponibles.append("Volver al menú principal")
 
         mostrar_menu(opciones_disponibles, titulo="Módulo de Gestión de Inventario")
@@ -60,9 +64,7 @@ def menu_gestion_inventario(usuario: str):
                 print(Fore.RED + "Opción no válida.")
                 pausar_pantalla()
                 continue
-
-            # --- CORRECCIÓN APLICADA AQUÍ ---
-            # Se usa 'in' para que funcione aunque el texto tenga contadores dinámicos
+            
             if "Registrar nuevo equipo" in opcion_texto:
                 registrar_equipo(usuario)
             elif "Gestionar Equipos" in opcion_texto:
@@ -71,6 +73,9 @@ def menu_gestion_inventario(usuario: str):
                 menu_ver_inventario_excel(usuario)
             elif "Gestionar Mantenimientos y Devoluciones" in opcion_texto:
                 menu_gestionar_pendientes(usuario)
+            # Se añade el manejador para la nueva opción
+            elif "Ver últimos 20 movimientos" in opcion_texto:
+                menu_ver_ultimos_movimientos(usuario)
             elif "Volver al menú principal" in opcion_texto:
                 break
             else: 
