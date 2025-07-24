@@ -1,19 +1,16 @@
 # gestion_inventario.py
 import os
 import re
-import webbrowser
+import textwrap # <-- Se importa el módulo para formateo de texto
 from datetime import datetime
 from typing import Optional, List
 
-import tempfile
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-from openpyxl.utils import get_column_letter
 from colorama import Fore, Style
 
 from database import db_manager, Equipo, registrar_movimiento_inventario, registrar_movimiento_sistema
 from ui import mostrar_encabezado, mostrar_menu, pausar_pantalla, confirmar_con_placa
 from gestion_acceso import requiere_permiso
+from gestion_reportes import generar_excel_historico_equipo
 
 # --- FUNCIONES DE UTILIDAD Y VALIDACIÓN ---
 def validar_placa_unica(placa: str) -> bool:
@@ -38,337 +35,48 @@ def validar_campo_general(texto: str) -> bool:
 def validar_serial(serial: str) -> bool:
     if not serial: return False
     return serial.isalnum()
+
+# --- NUEVA FUNCIÓN DE AYUDA PARA FORMATEO DE TEXTO ---
+def format_wrapped_text(label: str, text: str, width: int = 90) -> str:
+    """
+    Formatea un texto largo para que se ajuste a la consola con una indentación
+    consistente después de la etiqueta.
+    """
+    # Ancho de la etiqueta + 2 espacios de indentación
+    label_width = len(label)
+    # Espacios para la indentación de las líneas siguientes
+    subsequent_indent = ' ' * label_width
     
-# --- NUEVA FUNCIÓN PARA VER MOVIMIENTOS ---
-def menu_ver_ultimos_movimientos(usuario: str):
-    """Muestra una tabla con los últimos 20 movimientos de inventario del usuario."""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    movimientos = db_manager.get_last_movimientos_by_user(usuario, limit=20)
+    # Crea un objeto TextWrapper
+    wrapper = textwrap.TextWrapper(
+        initial_indent=label,
+        width=width,
+        subsequent_indent=subsequent_indent,
+        break_long_words=False,
+        replace_whitespace=False
+    )
+    # Devuelve el texto formateado
+    return wrapper.fill(text)
     
-    mostrar_encabezado("Tus Últimos 20 Movimientos", color=Fore.BLUE)
-
-    if not movimientos:
-        print(Fore.YELLOW + "No has registrado movimientos recientemente.".center(80) + Style.RESET_ALL)
-    else:
-        print(f"{Fore.CYAN}{'FECHA':<17} {'PLACA':<12} {'MARCA':<15} {'ACCIÓN':<30}{Style.RESET_ALL}")
-        print(Fore.CYAN + "-" * 74 + Style.RESET_ALL)
-        
-        for mov in movimientos:
-            fecha_obj = datetime.strptime(mov['fecha'], "%Y-%m-%d %H:%M:%S")
-            fecha_formateada = fecha_obj.strftime("%d/%m/%Y %H:%M")
-            
-            accion = mov.get('accion', 'N/A')
-            if len(accion) > 28:
-                accion = accion[:27] + "..."
-
-            placa = mov.get('equipo_placa', 'N/A')
-            marca = mov.get('marca', 'N/A') or 'N/A'
-
-            print(f"{fecha_formateada:<17} {placa:<12} {marca:<15} {accion:<30}")
-    
-    pausar_pantalla()
-
-# --- MENÚ DE REPORTES ---
-@requiere_permiso("ver_inventario")
-def menu_ver_inventario_excel(usuario: str):
-    """Muestra el menú para generar los reportes de inventario en Excel."""
-    while True:
-        mostrar_menu([
-            "Reporte de Inventario Actual (Equipos Activos)",
-            "Reporte de Equipos Devueltos a Proveedor",
-            "Reporte Histórico Completo de Equipos (Log)",
-            "Volver"
-        ], titulo="Ver Inventario en Excel")
-        
-        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
-
-        if opcion == '1':
-            generar_excel_inventario(usuario)
-        elif opcion == '2':
-            generar_excel_devueltos_proveedor(usuario)
-        elif opcion == '3':
-            generar_excel_historico(usuario)
-        elif opcion == '4':
-            break
-        else:
-            print(Fore.RED + "Opción no válida.")
-
-# --- FUNCIONES DE REPORTES (Excel) ---
-@requiere_permiso("generar_reporte")
-def generar_excel_inventario(usuario: str) -> None:
-    """Genera un reporte Excel con los equipos activos (no incluye los devueltos al proveedor)."""
-    try:
-        inventario = db_manager.get_equipos_activos()
-        if not inventario:
-            print(Fore.YELLOW + "\nNo hay equipos activos para generar un reporte.")
-            pausar_pantalla()
-            return
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Inventario de Equipos"
-
-        header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
-        border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        
-        encabezados = [
-            "FECHA REGISTRO", "PLACA", "TIPO", "MARCA", "MODELO", "SERIAL", "ESTADO", 
-            "FECHA ÚLTIMO CAMBIO", "USUARIO ÚLTIMO CAMBIO", "ASIGNADO A", "EMAIL", "ÚLTIMA OBSERVACIÓN"
-        ]
-        
-        column_widths = {'A': 25, 'B': 15, 'C': 25, 'D': 25, 'E': 25, 'F': 30, 'G': 30, 'H': 25, 'I': 25, 'J': 30, 'K': 30, 'L': 80}
-        for col, width in column_widths.items():
-            ws.column_dimensions[col].width = width
-        
-        for col_num, encabezado in enumerate(encabezados, 1):
-            col_letra = get_column_letter(col_num)
-            celda = ws[f"{col_letra}1"]
-            celda.value = encabezado
-            celda.fill = header_fill
-            celda.font = header_font
-            celda.alignment = Alignment(horizontal='center')
-            celda.border = border
-
-        colores_estado = {
-            "Disponible": "C6EFCE", "Asignado": "FFEB9C", "En préstamo": "DDEBF7",
-            "En mantenimiento": "FCE4D6", "Pendiente Devolución a Proveedor": "FFFFCC"
-        }
-
-        for row_num, equipo in enumerate(inventario, 2):
-            ultimo_movimiento = db_manager.get_last_movimiento_by_placa(equipo['placa'])
-            
-            fecha_ult_cambio = "N/A"
-            usuario_ult_cambio = "N/A"
-            ultima_observacion = equipo.get('observaciones', 'N/A')
-
-            if ultimo_movimiento:
-                fecha_obj = datetime.strptime(ultimo_movimiento['fecha'], "%Y-%m-%d %H:%M:%S")
-                fecha_ult_cambio = fecha_obj.strftime("%d/%m/%Y %H:%M")
-                usuario_ult_cambio = ultimo_movimiento.get('usuario', 'N/A')
-                ultima_observacion = ultimo_movimiento.get('detalles', ultima_observacion)
-
-            data_row = [
-                equipo.get('fecha_registro', 'N/A'), equipo.get('placa', 'N/A'), equipo.get('tipo', 'N/A'),
-                equipo.get('marca', 'N/A'), equipo.get('modelo', 'N/A'), equipo.get('serial', 'N/A'),
-                equipo.get('estado', 'N/A'), fecha_ult_cambio, usuario_ult_cambio,
-                equipo.get('asignado_a', ''), equipo.get('email_asignado', ''), ultima_observacion
-            ]
-            
-            for col_num, cell_value in enumerate(data_row, 1):
-                cell = ws.cell(row=row_num, column=col_num, value=cell_value)
-                cell.border = border
-            
-            estado_celda = ws.cell(row=row_num, column=7)
-            color_hex = colores_estado.get(equipo.get('estado'))
-            if color_hex:
-                estado_celda.fill = PatternFill(start_color=color_hex, end_color=color_hex, fill_type="solid")
-        
-        ws.freeze_panes = "A2"
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-            wb.save(tmp.name)
-            ruta_temporal = tmp.name
-
-        registrar_movimiento_sistema("Reporte Inventario Activo", f"Generado reporte con {len(inventario)} equipos", usuario)
-        print(Fore.GREEN + f"\n✅ Abriendo el reporte de inventario activo en Excel..." + Style.RESET_ALL)
-        webbrowser.open(ruta_temporal)
-
-    except Exception as e:
-        print(Fore.RED + f"\n❌ Error al generar el reporte Excel: {str(e)}" + Style.RESET_ALL)
-    finally:
-        pausar_pantalla()
-
-@requiere_permiso("generar_reporte")
-def generar_excel_devueltos_proveedor(usuario: str) -> None:
-    try:
-        inventario_devuelto = db_manager.get_equipos_devueltos()
-        if not inventario_devuelto:
-            print(Fore.YELLOW + "\nNo hay equipos devueltos al proveedor para reportar.")
-            pausar_pantalla()
-            return
-            
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Equipos Devueltos"
-        
-        header_fill = PatternFill(start_color="A5A5A5", end_color="A5A5A5", fill_type="solid")
-        header_font = Font(color="000000", bold=True)
-        border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        
-        encabezados = [
-            "PLACA", "TIPO", "MARCA", "MODELO", "SERIAL", 
-            "FECHA DEVOLUCIÓN", "MOTIVO DEVOLUCIÓN", "ÚLTIMA OBSERVACIÓN"
-        ]
-        
-        column_widths = {'A': 15, 'B': 25, 'C': 25, 'D': 25, 'E': 30, 'F': 25, 'G': 25, 'H': 80}
-        for col, width in column_widths.items():
-            ws.column_dimensions[col].width = width
-
-        for col_num, encabezado in enumerate(encabezados, 1):
-            col_letra = get_column_letter(col_num)
-            celda = ws[f"{col_letra}1"]
-            celda.value = encabezado
-            celda.fill = header_fill
-            celda.font = header_font
-            celda.alignment = Alignment(horizontal='center')
-            celda.border = border
-
-        for row_num, equipo in enumerate(inventario_devuelto, 2):
-            data_row = [
-                equipo.get('placa', 'N/A'), equipo.get('tipo', 'N/A'), equipo.get('marca', 'N/A'),
-                equipo.get('modelo', 'N/A'), equipo.get('serial', 'N/A'),
-                equipo.get('fecha_devolucion_proveedor', 'N/A'), equipo.get('motivo_devolucion', 'N/A'),
-                equipo.get('observaciones', 'N/A')
-            ]
-            for col_num, cell_value in enumerate(data_row, 1):
-                cell = ws.cell(row=row_num, column=col_num, value=cell_value)
-                cell.border = border
-        
-        ws.freeze_panes = "A2"
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-            wb.save(tmp.name)
-            ruta_temporal = tmp.name
-        
-        registrar_movimiento_sistema("Reporte Equipos Devueltos", f"Generado reporte con {len(inventario_devuelto)} equipos devueltos", usuario)
-        print(Fore.GREEN + f"\n✅ Abriendo el reporte de equipos devueltos en Excel..." + Style.RESET_ALL)
-        webbrowser.open(ruta_temporal)
-
-    except Exception as e:
-        print(Fore.RED + f"\n❌ Error al generar el reporte de equipos devueltos: {str(e)}" + Style.RESET_ALL)
-    finally:
-        pausar_pantalla()
-
-@requiere_permiso("ver_historico")
-def generar_excel_historico(usuario: str):
-    try:
-        log_equipos = db_manager.get_all_log_inventario()
-
-        if not log_equipos:
-            print(Fore.YELLOW + "\nNo hay movimientos de equipos para exportar.")
-            pausar_pantalla()
-            return
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Histórico de Movimientos"
-
-        header_fill = PatternFill(start_color="808080", end_color="808080", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
-        border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        
-        encabezados = ["FECHA", "PLACA EQUIPO", "ACCIÓN", "USUARIO", "DETALLES"]
-        
-        for col_num, encabezado in enumerate(encabezados, 1):
-            col_letra = get_column_letter(col_num)
-            celda = ws[f"{col_letra}1"]
-            celda.value = encabezado
-            celda.fill = header_fill
-            celda.font = header_font
-            celda.alignment = Alignment(horizontal='center')
-            celda.border = border
-        
-        ws.column_dimensions['A'].width = 25
-        ws.column_dimensions['B'].width = 20
-        ws.column_dimensions['C'].width = 25
-        ws.column_dimensions['D'].width = 20
-        ws.column_dimensions['E'].width = 80
-
-        for row_num, mov in enumerate(log_equipos, 2):
-            fecha_obj = datetime.strptime(mov['fecha'], "%Y-%m-%d %H:%M:%S")
-            fecha_formateada = fecha_obj.strftime("%d/%m/%Y %H:%M")
-            
-            ws.cell(row=row_num, column=1, value=fecha_formateada).border = border
-            ws.cell(row=row_num, column=2, value=mov.get('equipo_placa', 'N/A')).border = border
-            ws.cell(row=row_num, column=3, value=mov.get('accion', 'N/A')).border = border
-            ws.cell(row=row_num, column=4, value=mov.get('usuario', 'N/A')).border = border
-            ws.cell(row=row_num, column=5, value=mov.get('detalles', '')).border = border
-        
-        ws.freeze_panes = "A2"
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-            wb.save(tmp.name)
-            ruta_temporal = tmp.name
-
-        registrar_movimiento_sistema("Reporte Histórico Equipos", "Generado reporte de histórico de equipos", usuario)
-        print(Fore.GREEN + f"\n✅ Abriendo el reporte histórico de equipos en Excel..." + Style.RESET_ALL)
-        webbrowser.open(ruta_temporal)
-
-    except Exception as e:
-        print(Fore.RED + f"\n❌ Error al generar el reporte de histórico: {str(e)}" + Style.RESET_ALL)
-    finally:
-        pausar_pantalla()
-
-def generar_excel_historico_equipo(usuario: str, equipo: Equipo):
-    """Genera un reporte Excel con el historial de un solo equipo."""
-    try:
-        log_equipo = db_manager.get_log_by_placa(equipo.placa)
-
-        if not log_equipo:
-            print(Fore.YELLOW + f"\nNo hay historial para el equipo {equipo.placa}.")
-            pausar_pantalla()
-            return
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = f"Historial {equipo.placa}"
-
-        header_fill = PatternFill(start_color="808080", end_color="808080", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
-        border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        
-        encabezados = ["FECHA", "ACCIÓN", "USUARIO", "DETALLES"]
-        
-        for col_num, encabezado in enumerate(encabezados, 1):
-            col_letra = get_column_letter(col_num)
-            celda = ws[f"{col_letra}1"]
-            celda.value = encabezado
-            celda.fill = header_fill
-            celda.font = header_font
-            celda.alignment = Alignment(horizontal='center')
-            celda.border = border
-        
-        ws.column_dimensions['A'].width = 25
-        ws.column_dimensions['B'].width = 25
-        ws.column_dimensions['C'].width = 20
-        ws.column_dimensions['D'].width = 80
-
-        for row_num, mov in enumerate(log_equipo, 2):
-            fecha_obj = datetime.strptime(mov['fecha'], "%Y-%m-%d %H:%M:%S")
-            fecha_formateada = fecha_obj.strftime("%d/%m/%Y %H:%M")
-            
-            ws.cell(row=row_num, column=1, value=fecha_formateada).border = border
-            ws.cell(row=row_num, column=2, value=mov.get('accion', 'N/A')).border = border
-            ws.cell(row=row_num, column=3, value=mov.get('usuario', 'N/A')).border = border
-            ws.cell(row=row_num, column=4, value=mov.get('detalles', '')).border = border
-        
-        ws.freeze_panes = "A2"
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-            wb.save(tmp.name)
-            ruta_temporal = tmp.name
-
-        registrar_movimiento_sistema("Reporte Histórico Individual", f"Generado reporte para placa {equipo.placa}", usuario)
-        print(Fore.GREEN + f"\n✅ Abriendo el historial del equipo {equipo.placa} en Excel..." + Style.RESET_ALL)
-        webbrowser.open(ruta_temporal)
-
-    except Exception as e:
-        print(Fore.RED + f"\n❌ Error al generar el historial del equipo: {str(e)}" + Style.RESET_ALL)
-    finally:
-        pausar_pantalla()
-
 # --- FUNCIONES PRINCIPALES DE INVENTARIO ---
-def seleccionar_parametro(tipo_parametro: Optional[str], nombre_amigable: str, lista_opciones: Optional[List[str]] = None) -> Optional[str]:
+def seleccionar_parametro(tipo_parametro: Optional[str], nombre_amigable: str, lista_opciones: Optional[List[str]] = None, valor_actual: Optional[str] = None) -> Optional[str]:
+    """Función mejorada para seleccionar un parámetro, con opción de mantener el valor actual."""
     parametros = lista_opciones if lista_opciones is not None else [p['valor'] for p in db_manager.get_parametros_por_tipo(tipo_parametro, solo_activos=True)]
     
     while True:
-        print(Fore.GREEN + f"Seleccione un {nombre_amigable}:")
+        print(Fore.GREEN + f"\nSeleccione un {nombre_amigable}:")
+        if valor_actual:
+            print(Fore.CYAN + f"-> Valor actual: {valor_actual}. Deje en blanco y presione Enter para mantenerlo." + Style.RESET_ALL)
+        
         for i, param in enumerate(parametros, 1):
             print(f"{i}. {param}")
-        print() 
+        print()
 
         seleccion = input(Fore.YELLOW + "Opción: " + Style.RESET_ALL).strip()
+        
+        if not seleccion and valor_actual:
+            return valor_actual
+
         try:
             idx = int(seleccion) - 1
             if 0 <= idx < len(parametros):
@@ -514,16 +222,26 @@ def gestionar_equipos(usuario: str):
 def menu_gestion_especifica(usuario: str, equipo: Equipo):
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
-        mostrar_encabezado(f"Gestionando Equipo: {equipo.marca} {equipo.modelo} - PLACA: {equipo.placa}", color=Fore.GREEN)
-        print(f"{Fore.CYAN}Estado actual:{Style.RESET_ALL} {equipo.estado}")
-        if equipo.asignado_a: print(f"{Fore.CYAN}Asignado a:{Style.RESET_ALL} {equipo.asignado_a} ({equipo.email_asignado})")
-        if equipo.fecha_devolucion_prestamo: print(f"{Fore.CYAN}Fecha devolución (Préstamo):{Style.RESET_ALL} {equipo.fecha_devolucion_prestamo}")
-        print("-" * 80)
+        mostrar_encabezado(f"Gestionando Equipo - PLACA: {equipo.placa}", color=Fore.GREEN)
         
+        print(Fore.CYAN + "--- Información del Equipo ---")
+        print(f"  {'Placa:'.ljust(25)} {equipo.placa}")
+        print(f"  {'Tipo:'.ljust(25)} {equipo.tipo}")
+        print(f"  {'Marca:'.ljust(25)} {equipo.marca}")
+        print(f"  {'Modelo:'.ljust(25)} {equipo.modelo}")
+        print(f"  {'Serial:'.ljust(25)} {equipo.serial}")
+        
+        print(Fore.CYAN + "\n--- Estado y Asignación ---")
+        print(f"  {'Estado actual:'.ljust(25)} {equipo.estado}")
+        if equipo.asignado_a:
+            print(f"  {'Asignado a:'.ljust(25)} {equipo.asignado_a} ({equipo.email_asignado})")
+        if equipo.fecha_devolucion_prestamo:
+            print(f"  {'Fecha devolución (Préstamo):'.ljust(25)} {equipo.fecha_devolucion_prestamo}")
+
         if equipo.estado in ["En mantenimiento", "Pendiente Devolución a Proveedor", "Devuelto a Proveedor"]:
             print(Fore.YELLOW + f"⚠️  Este equipo está '{equipo.estado}'. Las acciones de gestión están limitadas.")
             opciones_limitadas = [
-                "Ver Detalles del Equipo",
+                "Ver Detalles Completos del Equipo",
                 "Ver Historial del Equipo (Excel)",
                 "Volver al menú anterior"
             ]
@@ -541,21 +259,24 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
             continue
         
         opciones_gestion = [
-            "Asignar/Prestar equipo", "Devolver equipo al inventario", "Registrar para mantenimiento",
-            "Registrar para devolución a Proveedor", "Editar información del equipo", 
-            "Eliminar equipo",
-            "Ver Detalles del Equipo",
+            "Asignar/Prestar equipo",
+            "Devolver equipo al inventario",
+            "Registrar para mantenimiento",
+            "Registrar para devolución a Proveedor",
+            "Ver Detalles Completos del Equipo",
             "Ver Historial del Equipo (Excel)",
+            "Editar información del equipo",
+            "Eliminar equipo",
             "Volver al menú anterior"
         ]
-        mostrar_menu(opciones_gestion, titulo=f"Opciones para {equipo.placa}")
+        mostrar_menu(opciones_gestion, titulo="Opciones disponibles para este equipo")
         
         opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
 
         opciones_validas = {
             "1": "asignar", "2": "devolver", "3": "mantenimiento",
-            "4": "proveedor", "5": "editar", "6": "eliminar",
-            "7": "detalles", "8": "historial", "9": "volver"
+            "4": "proveedor", "5": "detalles", "6": "historial",
+            "7": "editar", "8": "eliminar", "9": "volver"
         }
         accion = opciones_validas.get(opcion)
 
@@ -563,13 +284,11 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
         elif accion == "devolver": devolver_equipo(usuario, equipo)
         elif accion == "mantenimiento": registrar_mantenimiento(usuario, equipo)
         elif accion == "proveedor": registrar_devolucion_a_proveedor(usuario, equipo)
+        elif accion == "detalles": mostrar_detalles_equipo(equipo)
+        elif accion == "historial": generar_excel_historico_equipo(usuario, equipo)
         elif accion == "editar": editar_equipo(usuario, equipo)
         elif accion == "eliminar":
             if eliminar_equipo(usuario, equipo): return 
-        elif accion == "detalles":
-            mostrar_detalles_equipo(equipo)
-        elif accion == "historial":
-            generar_excel_historico_equipo(usuario, equipo)
         elif accion == "volver": break
         else:
             print(Fore.RED + "❌ Opción no válida. Por favor, intente de nuevo.")
@@ -580,24 +299,80 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
         equipo = Equipo(**equipo_data_actualizado)
 
 def mostrar_detalles_equipo(equipo: Equipo):
-    """Muestra una vista detallada de la información de un equipo en la consola."""
-    mostrar_encabezado(f"Detalles del Equipo: Placa {equipo.placa}", color=Fore.CYAN)
-    print(f"  {'Placa:'.ljust(25)} {equipo.placa}")
-    print(f"  {'Tipo:'.ljust(25)} {equipo.tipo}")
-    print(f"  {'Marca:'.ljust(25)} {equipo.marca}")
-    print(f"  {'Modelo:'.ljust(25)} {equipo.modelo}")
-    print(f"  {'Serial:'.ljust(25)} {equipo.serial}")
-    print("-" * 40)
-    print(f"  {'Estado Actual:'.ljust(25)} {equipo.estado}")
-    print(f"  {'Asignado a:'.ljust(25)} {equipo.asignado_a or 'N/A'}")
-    print(f"  {'Email Asignado:'.ljust(25)} {equipo.email_asignado or 'N/A'}")
-    print("-" * 40)
-    print(f"  {'Fecha de Registro:'.ljust(25)} {equipo.fecha_registro}")
-    print(f"  {'Fecha Devolución Préstamo:'.ljust(25)} {equipo.fecha_devolucion_prestamo or 'N/A'}")
-    print(f"  {'Fecha Devolución Proveedor:'.ljust(25)} {equipo.fecha_devolucion_proveedor or 'N/A'}")
-    print(f"  {'Motivo Devolución:'.ljust(25)} {equipo.motivo_devolucion or 'N/A'}")
-    print("-" * 40)
-    print(f"  {'Observaciones:'.ljust(25)} {equipo.observaciones or 'N/A'}")
+    """Muestra una vista detallada y contextual de la información de un equipo."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    mostrar_encabezado(f"Detalles Completos del Equipo: Placa {equipo.placa}", color=Fore.CYAN)
+
+    # --- Sección 1: Información General ---
+    print(Fore.CYAN + "--- Información del Equipo ---" + Style.RESET_ALL)
+    print(f"  {'Placa:'.ljust(28)} {equipo.placa}")
+    print(f"  {'Tipo:'.ljust(28)} {equipo.tipo}")
+    print(f"  {'Marca:'.ljust(28)} {equipo.marca}")
+    print(f"  {'Modelo:'.ljust(28)} {equipo.modelo}")
+    print(f"  {'Serial:'.ljust(28)} {equipo.serial}")
+    print(f"  {'Fecha de Registro:'.ljust(28)} {equipo.fecha_registro}")
+
+    # --- Sección 2: Estado y Asignación (Contextual) ---
+    print(Fore.CYAN + "\n--- Estado y Asignación ---" + Style.RESET_ALL)
+    print(f"  {'Estado Actual:'.ljust(28)} {equipo.estado}")
+
+    if equipo.estado in ["Asignado", "En préstamo"]:
+        print(f"  {'Asignado a:'.ljust(28)} {equipo.asignado_a or 'N/A'}")
+        print(f"  {'Email Asignado:'.ljust(28)} {equipo.email_asignado or 'N/A'}")
+        if equipo.fecha_devolucion_prestamo:
+            print(f"  {'Fecha Devolución Préstamo:'.ljust(28)} {equipo.fecha_devolucion_prestamo}")
+
+    # --- Sección 3: Información Contextual por Estado ---
+    log_mantenimiento = db_manager.get_last_log_by_action(equipo.placa, 'Mantenimiento')
+    if equipo.estado == "En mantenimiento" and log_mantenimiento:
+        print(Fore.CYAN + "\n--- Detalles del Mantenimiento ---" + Style.RESET_ALL)
+        fecha_evento = datetime.strptime(log_mantenimiento['fecha'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
+        print(f"  {'Fecha de Registro:'.ljust(28)} {fecha_evento}")
+        print(f"  {'Registrado por:'.ljust(28)} {log_mantenimiento['usuario']}")
+        
+        # Uso de la nueva función de formato
+        label = f"  {'Detalles:'.ljust(28)}"
+        print(format_wrapped_text(label, log_mantenimiento['detalles']))
+
+    log_devolucion = db_manager.get_last_log_by_action(equipo.placa, 'Registro Devolución Proveedor')
+    if equipo.estado == "Pendiente Devolución a Proveedor" and log_devolucion:
+        print(Fore.CYAN + "\n--- Detalles de Devolución a Proveedor ---" + Style.RESET_ALL)
+        fecha_evento = datetime.strptime(log_devolucion['fecha'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
+        print(f"  {'Fecha de Registro:'.ljust(28)} {fecha_evento}")
+        print(f"  {'Registrado por:'.ljust(28)} {log_devolucion['usuario']}")
+        print(f"  {'Motivo:'.ljust(28)} {equipo.motivo_devolucion}")
+        print(f"  {'Fecha Programada:'.ljust(28)} {equipo.fecha_devolucion_proveedor}")
+        
+        # Uso de la nueva función de formato
+        label = f"  {'Observaciones:'.ljust(28)}"
+        print(format_wrapped_text(label, equipo.observaciones))
+
+
+    log_devolucion_completada = db_manager.get_last_log_by_action(equipo.placa, 'Devolución a Proveedor Completada')
+    if equipo.estado == "Devuelto a Proveedor" and log_devolucion_completada:
+        print(Fore.CYAN + "\n--- Detalles de la Devolución Completada ---" + Style.RESET_ALL)
+        fecha_evento = datetime.strptime(log_devolucion_completada['fecha'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
+        print(f"  {'Fecha de Ejecución:'.ljust(28)} {fecha_evento}")
+        print(f"  {'Confirmado por:'.ljust(28)} {log_devolucion_completada['usuario']}")
+        print(f"  {'Motivo Original:'.ljust(28)} {equipo.motivo_devolucion}")
+        
+        # Uso de la nueva función de formato
+        label = f"  {'Observaciones Finales:'.ljust(28)}"
+        print(format_wrapped_text(label, log_devolucion_completada['detalles']))
+
+    # --- Sección 4: Últimos Movimientos ---
+    print(Fore.CYAN + "\n--- Últimos 5 Movimientos ---" + Style.RESET_ALL)
+    ultimos_movimientos = db_manager.get_log_by_placa(equipo.placa, limit=5)
+    if not ultimos_movimientos:
+        print("  No hay movimientos registrados para este equipo.")
+    else:
+        print(f"  {Fore.YELLOW}{'FECHA':<20} {'ACCIÓN':<30} {'USUARIO':<15}{Style.RESET_ALL}")
+        print(f"  {'-'*18} {'-'*28} {'-'*13}")
+        for mov in ultimos_movimientos:
+            fecha_obj = datetime.strptime(mov['fecha'], "%Y-%m-%d %H:%M:%S")
+            fecha_formateada = fecha_obj.strftime("%d/%m/%Y %H:%M")
+            print(f"  {fecha_formateada:<20} {mov['accion']:<30} {mov['usuario']:<15}")
+
     pausar_pantalla()
 
 @requiere_permiso("gestionar_equipo")
@@ -718,16 +493,13 @@ def editar_equipo(usuario: str, equipo: Equipo):
         mostrar_encabezado(f"Editando Equipo: {equipo.placa}", color=Fore.BLUE)
         print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
         
-        print(Fore.CYAN + "--- Información Actual del Equipo ---")
-        print(f"  Tipo:          {equipo.tipo}")
-        print(f"  Marca:         {equipo.marca}")
-        print(f"  Modelo:        {equipo.modelo}")
-        print(f"  Serial:        {equipo.serial}")
-        print("---------------------------------------" + Style.RESET_ALL)
+        tipo_nuevo = seleccionar_parametro('tipo_equipo', 'Tipo de Equipo', valor_actual=equipo.tipo)
+        if tipo_nuevo is None: return
+        
+        marca_nueva = seleccionar_parametro('marca_equipo', 'Marca', valor_actual=equipo.marca)
+        if marca_nueva is None: return
+        
         print("\nDeje el campo en blanco y presione Enter para mantener el valor actual.")
-
-        tipo_nuevo = input(Fore.YELLOW + f"Tipo ({Fore.CYAN}{equipo.tipo}{Fore.YELLOW}): " + Style.RESET_ALL).strip() or equipo.tipo
-        marca_nueva = input(Fore.YELLOW + f"Marca ({Fore.CYAN}{equipo.marca}{Fore.YELLOW}): " + Style.RESET_ALL).strip() or equipo.marca
         
         while True:
             modelo_nuevo = input(Fore.YELLOW + f"Modelo ({Fore.CYAN}{equipo.modelo}{Fore.YELLOW}): " + Style.RESET_ALL).strip() or equipo.modelo
@@ -1206,22 +978,3 @@ def gestionar_devoluciones_proveedor(usuario: str):
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Regresando al menú anterior.")
         pausar_pantalla()
-
-@requiere_permiso("ver_inventario")
-def ver_inventario_consola():
-    mostrar_encabezado("Inventario Actual de Equipos Activos")
-    inventario = db_manager.get_equipos_activos()
-    if not inventario:
-        print(Fore.YELLOW + "\nEl inventario activo está vacío.")
-    else:
-        print(f"{Fore.CYAN}{'PLACA':<12} {'TIPO':<15} {'MARCA':<15} {'MODELO':<20} {'ESTADO':<30} {'ASIGNADO A':<20}{Style.RESET_ALL}")
-        print(Fore.CYAN + "="*112 + Style.RESET_ALL)
-        for equipo in inventario:
-            estado_color = Fore.WHITE
-            if equipo['estado'] == "Disponible": estado_color = Fore.GREEN
-            elif equipo['estado'] in ["Asignado", "En préstamo"]: estado_color = Fore.YELLOW
-            elif equipo['estado'] == "En mantenimiento": estado_color = Fore.MAGENTA
-            elif equipo['estado'] == "Pendiente Devolución a Proveedor": estado_color = Fore.LIGHTYELLOW_EX
-            asignado_a = equipo.get('asignado_a') or 'N/A'
-            print(f"{equipo['placa']:<12} {equipo['tipo']:<15} {equipo['marca']:<15} {equipo['modelo']:<20} {estado_color}{equipo['estado']:<30}{Style.RESET_ALL} {asignado_a:<20}")
-    pausar_pantalla()

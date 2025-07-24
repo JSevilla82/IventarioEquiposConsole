@@ -9,9 +9,10 @@ from ui import (
     mostrar_encabezado, mostrar_menu, pausar_pantalla
 )
 from gestion_inventario import (
-    registrar_equipo, gestionar_equipos, menu_ver_inventario_excel,
-    menu_gestionar_pendientes, menu_ver_ultimos_movimientos # <-- Se importa la nueva función
+    registrar_equipo, gestionar_equipos,
+    menu_gestionar_pendientes
 )
+from gestion_reportes import menu_ver_inventario  # <-- Se importa desde el nuevo archivo
 from gestion_acceso import (
     login, menu_usuarios, menu_configuracion_sistema,
     cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS,
@@ -34,8 +35,6 @@ def menu_gestion_inventario(usuario: str):
             opciones_disponibles.append("Registrar nuevo equipo")
         if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: 
             opciones_disponibles.append("Gestionar Equipos")
-        if "ver_inventario" in ROLES_PERMISOS[rol_actual]: 
-            opciones_disponibles.append("Ver Inventario en Excel")
         
         if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]:
             mantenimientos_pendientes = len([e for e in db_manager.get_all_equipos() if e.get('estado') == "En mantenimiento"])
@@ -49,8 +48,6 @@ def menu_gestion_inventario(usuario: str):
             texto_menu_pendientes = f"Gestionar Mantenimientos y Devoluciones {color}({total_pendientes} Pendientes){Style.RESET_ALL}"
             opciones_disponibles.append(texto_menu_pendientes)
         
-        # Se añade la nueva opción al menú
-        opciones_disponibles.append("Ver últimos 20 movimientos")
         opciones_disponibles.append("Volver al menú principal")
 
         mostrar_menu(opciones_disponibles, titulo="Módulo de Gestión de Inventario")
@@ -69,13 +66,8 @@ def menu_gestion_inventario(usuario: str):
                 registrar_equipo(usuario)
             elif "Gestionar Equipos" in opcion_texto:
                 gestionar_equipos(usuario)
-            elif "Ver Inventario en Excel" in opcion_texto:
-                menu_ver_inventario_excel(usuario)
             elif "Gestionar Mantenimientos y Devoluciones" in opcion_texto:
                 menu_gestionar_pendientes(usuario)
-            # Se añade el manejador para la nueva opción
-            elif "Ver últimos 20 movimientos" in opcion_texto:
-                menu_ver_ultimos_movimientos(usuario)
             elif "Volver al menú principal" in opcion_texto:
                 break
             else: 
@@ -147,15 +139,23 @@ def menu_principal():
             print(Back.YELLOW + Fore.BLACK + "--- MODO DESARROLLO ---".center(80, ' ') + Style.RESET_ALL)
         print(Fore.BLUE + "═" * 80 + Style.RESET_ALL)
         
-        opciones_principales = ["Gestión de Inventario", "Gestión de Acceso y Sistema", "Salir"]
+        # --- MENÚ PRINCIPAL ACTUALIZADO ---
+        opciones_principales = [
+            "Gestión de Inventario",
+            "Ver Inventario",  # <-- Nueva opción
+            "Gestión de Acceso y Sistema",
+            "Salir"
+        ]
         mostrar_menu(opciones_principales, titulo="Módulos del Sistema")
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo: " + Style.RESET_ALL).strip()
         if opcion == '1':
             menu_gestion_inventario(usuario_logueado)
         elif opcion == '2':
-            menu_gestion_acceso_sistema(usuario_logueado)
+            menu_ver_inventario(usuario_logueado)  # <-- Llama a la nueva función
         elif opcion == '3':
+            menu_gestion_acceso_sistema(usuario_logueado)
+        elif opcion == '4':
             break
         else:
             print(Fore.RED + "\n❌ Opción no válida.")

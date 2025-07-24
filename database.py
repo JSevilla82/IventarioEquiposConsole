@@ -224,9 +224,12 @@ class DatabaseManager:
         result = cursor.fetchone()
         return result[0] if result else 0
         
-    def get_log_by_placa(self, placa: str) -> List[Dict]:
-        """Obtiene todo el historial de movimientos para una placa específica."""
-        cursor = self.execute_query('SELECT * FROM log_inventario WHERE equipo_placa = ? ORDER BY fecha DESC', (placa,))
+    def get_log_by_placa(self, placa: str, limit: Optional[int] = None) -> List[Dict]:
+        """Obtiene el historial de movimientos para una placa, con un límite opcional."""
+        query = 'SELECT * FROM log_inventario WHERE equipo_placa = ? ORDER BY fecha DESC'
+        if limit:
+            query += f' LIMIT {limit}'
+        cursor = self.execute_query(query, (placa,))
         return [dict(row) for row in cursor.fetchall()]
 
     def insert_log_sistema(self, log: LogSistema):
@@ -245,6 +248,12 @@ class DatabaseManager:
 
     def get_last_movimiento_by_placa(self, placa: str) -> Optional[Dict]:
         cursor = self.execute_query('SELECT * FROM log_inventario WHERE equipo_placa = ? ORDER BY fecha DESC LIMIT 1', (placa,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_last_log_by_action(self, placa: str, accion: str) -> Optional[Dict]:
+        """Obtiene el último registro de log para una placa y acción específicas."""
+        cursor = self.execute_query('SELECT * FROM log_inventario WHERE equipo_placa = ? AND accion = ? ORDER BY fecha DESC LIMIT 1', (placa, accion))
         row = cursor.fetchone()
         return dict(row) if row else None
         
