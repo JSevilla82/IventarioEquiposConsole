@@ -1,7 +1,7 @@
 # gestion_inventario.py
 import os
 import re
-import textwrap # <-- Se importa el módulo para formateo de texto
+import textwrap
 from datetime import datetime
 from typing import Optional, List
 
@@ -17,7 +17,8 @@ def validar_placa_unica(placa: str) -> bool:
     return db_manager.get_equipo_by_placa(placa) is None
 
 def validar_email(email: str) -> bool:
-    return re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email) is not None
+    # Expresión regular mejorada para validar emails
+    return re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email) is not None
 
 def validar_placa_formato(placa: str) -> bool:
     return len(placa) >= 4 and placa.isalnum()
@@ -36,18 +37,27 @@ def validar_serial(serial: str) -> bool:
     if not serial: return False
     return serial.isalnum()
 
+# MODIFICACIÓN: Nueva función para validar y formatear nombres
+def formatear_y_validar_nombre(nombre: str) -> Optional[str]:
+    """
+    Valida que el nombre tenga al menos dos palabras y lo formatea a tipo título.
+    Devuelve el nombre formateado o None si no es válido.
+    """
+    partes = nombre.strip().split()
+    if len(partes) < 2:
+        return None
+    # Pone en mayúscula la primera letra de cada palabra y las une con un espacio
+    return ' '.join(p.capitalize() for p in partes)
+
 # --- NUEVA FUNCIÓN DE AYUDA PARA FORMATEO DE TEXTO ---
 def format_wrapped_text(label: str, text: str, width: int = 90) -> str:
     """
     Formatea un texto largo para que se ajuste a la consola con una indentación
     consistente después de la etiqueta.
     """
-    # Ancho de la etiqueta + 2 espacios de indentación
     label_width = len(label)
-    # Espacios para la indentación de las líneas siguientes
     subsequent_indent = ' ' * label_width
     
-    # Crea un objeto TextWrapper
     wrapper = textwrap.TextWrapper(
         initial_indent=label,
         width=width,
@@ -55,7 +65,6 @@ def format_wrapped_text(label: str, text: str, width: int = 90) -> str:
         break_long_words=False,
         replace_whitespace=False
     )
-    # Devuelve el texto formateado
     return wrapper.fill(text)
     
 # --- FUNCIONES PRINCIPALES DE INVENTARIO ---
@@ -316,11 +325,11 @@ def mostrar_detalles_equipo(equipo: Equipo):
     print(Fore.CYAN + "\n--- Estado y Asignación ---" + Style.RESET_ALL)
     print(f"  {'Estado Actual:'.ljust(28)} {equipo.estado}")
 
-    if equipo.estado in ["Asignado", "En préstamo"]:
-        print(f"  {'Asignado a:'.ljust(28)} {equipo.asignado_a or 'N/A'}")
-        print(f"  {'Email Asignado:'.ljust(28)} {equipo.email_asignado or 'N/A'}")
-        if equipo.fecha_devolucion_prestamo:
-            print(f"  {'Fecha Devolución Préstamo:'.ljust(28)} {equipo.fecha_devolucion_prestamo}")
+    if equipo.asignado_a:
+        print(f"  {'Asignado a:'.ljust(28)} {equipo.asignado_a} ({equipo.email_asignado or 'Sin email'})")
+
+    if equipo.estado == "En préstamo" and equipo.fecha_devolucion_prestamo:
+        print(f"  {'Fecha Devolución Préstamo:'.ljust(28)} {equipo.fecha_devolucion_prestamo}")
 
     # --- Sección 3: Información Contextual por Estado ---
     log_mantenimiento = db_manager.get_last_log_by_action(equipo.placa, 'Mantenimiento')
@@ -330,7 +339,6 @@ def mostrar_detalles_equipo(equipo: Equipo):
         print(f"  {'Fecha de Registro:'.ljust(28)} {fecha_evento}")
         print(f"  {'Registrado por:'.ljust(28)} {log_mantenimiento['usuario']}")
         
-        # Uso de la nueva función de formato
         label = f"  {'Detalles:'.ljust(28)}"
         print(format_wrapped_text(label, log_mantenimiento['detalles']))
 
@@ -343,7 +351,6 @@ def mostrar_detalles_equipo(equipo: Equipo):
         print(f"  {'Motivo:'.ljust(28)} {equipo.motivo_devolucion}")
         print(f"  {'Fecha Programada:'.ljust(28)} {equipo.fecha_devolucion_proveedor}")
         
-        # Uso de la nueva función de formato
         label = f"  {'Observaciones:'.ljust(28)}"
         print(format_wrapped_text(label, equipo.observaciones))
 
@@ -356,7 +363,6 @@ def mostrar_detalles_equipo(equipo: Equipo):
         print(f"  {'Confirmado por:'.ljust(28)} {log_devolucion_completada['usuario']}")
         print(f"  {'Motivo Original:'.ljust(28)} {equipo.motivo_devolucion}")
         
-        # Uso de la nueva función de formato
         label = f"  {'Observaciones Finales:'.ljust(28)}"
         print(format_wrapped_text(label, log_devolucion_completada['detalles']))
 
@@ -382,6 +388,15 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
         pausar_pantalla()
         return
     
+    # MODIFICACIÓN: Verificar si hay dominios configurados antes de continuar
+    dominios_permitidos = db_manager.get_parametros_por_tipo('dominio_correo', solo_activos=True)
+    if not dominios_permitidos:
+        print(Fore.RED + "❌ No se puede asignar un equipo.")
+        print(Fore.YELLOW + "   - No hay 'Dominios de Correo' activos configurados en el sistema.")
+        print(Fore.CYAN + "   Por favor, pida a un Administrador que configure este parámetro.")
+        pausar_pantalla()
+        return
+
     try:
         print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
         while True:
@@ -390,11 +405,32 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                 break
             print(Fore.RED + "Opción inválida. Intente de nuevo.")
         
-        nombre_asignado = input(Fore.YELLOW + "Nombre de la persona: " + Style.RESET_ALL).strip()
+        # MODIFICACIÓN: Bucle para validar y formatear el nombre
         while True:
-            email_asignado = input(Fore.YELLOW + "Email de la persona: " + Style.RESET_ALL).strip()
-            if validar_email(email_asignado): break
-            print(Fore.RED + "Email inválido. Intente de nuevo.")
+            nombre_input = input(Fore.YELLOW + "Nombre de la persona: " + Style.RESET_ALL).strip()
+            nombre_asignado = formatear_y_validar_nombre(nombre_input)
+            if nombre_asignado:
+                break
+            print(Fore.RED + "Nombre inválido. Debe contener al menos nombre y apellido (ej: Juan Pérez).")
+
+        # MODIFICACIÓN: Bucle para validar el dominio del correo electrónico
+        while True:
+            email_asignado = input(Fore.YELLOW + "Email de la persona: " + Style.RESET_ALL).strip().lower()
+            if not validar_email(email_asignado):
+                print(Fore.RED + "Formato de email inválido. Intente de nuevo.")
+                continue
+            
+            try:
+                dominio_email = email_asignado.split('@')[1]
+                dominios_activos_lista = [d['valor'] for d in dominios_permitidos]
+
+                if dominio_email in dominios_activos_lista:
+                    break  # El dominio es válido y está activo
+                else:
+                    print(Fore.RED + f"❌ Dominio '{dominio_email}' no está permitido.")
+                    print(Fore.CYAN + "Dominios activos permitidos: " + ", ".join(dominios_activos_lista))
+            except IndexError:
+                print(Fore.RED + "Formato de email inválido. Intente de nuevo.")
 
         while True:
             observacion_asignacion = input(Fore.YELLOW + "Observación de la asignación/préstamo: " + Style.RESET_ALL).strip()

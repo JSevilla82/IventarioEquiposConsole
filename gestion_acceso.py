@@ -315,13 +315,25 @@ def generar_excel_log_sistema(usuario: str):
 @requiere_permiso("configurar_sistema")
 def menu_configuracion_sistema(usuario: str):
     while True:
-        ui.mostrar_menu(["Gestionar Tipos de Equipo", "Gestionar Marcas", "Volver"], titulo="Configuración del Sistema")
+        # MODIFICACIÓN: Añadida nueva opción al menú
+        opciones_menu = [
+            "Gestionar Tipos de Equipo", 
+            "Gestionar Marcas", 
+            "Gestionar Dominios de Correo", 
+            "Volver"
+        ]
+        ui.mostrar_menu(opciones_menu, titulo="Configuración del Sistema")
+        
         opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+        
         if opcion == '1':
             gestionar_parametros(usuario, 'tipo_equipo', 'Tipo de Equipo')
         elif opcion == '2':
             gestionar_parametros(usuario, 'marca_equipo', 'Marca')
         elif opcion == '3':
+            # MODIFICACIÓN: Llamada para gestionar dominios
+            gestionar_parametros(usuario, 'dominio_correo', 'Dominio de Correo Permitido')
+        elif opcion == '4':
             break
         else:
             print(Fore.RED + "Opción no válida.")
@@ -357,12 +369,17 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
         if accion == "add":
             try:
                 while True:
-                    nuevo_valor = input(Fore.YELLOW + f"Paso 1: Ingrese el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip()
+                    nuevo_valor = input(Fore.YELLOW + f"Paso 1: Ingrese el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip().lower()
                     if not nuevo_valor:
                         print(Fore.RED + "El valor no puede estar vacío.")
                         continue
                     
-                    confirmacion_valor = input(Fore.YELLOW + f"Paso 2: Confirme el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip()
+                    # Validación específica para dominios
+                    if tipo_parametro == 'dominio_correo' and ('@' in nuevo_valor or '.' not in nuevo_valor):
+                        print(Fore.RED + "Formato de dominio inválido. Ingrese solo el dominio (ej: gmail.com).")
+                        continue
+
+                    confirmacion_valor = input(Fore.YELLOW + f"Paso 2: Confirme el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip().lower()
                     
                     if nuevo_valor == confirmacion_valor:
                         break

@@ -279,6 +279,17 @@ class DatabaseManager:
         cursor = self.execute_query(query, (usuario, limit))
         return [dict(row) for row in cursor.fetchall()]
 
+    # MODIFICACIÓN: Nueva función para obtener movimientos en un rango de fechas
+    def get_movimientos_en_rango_de_fechas(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
+        """Obtiene todos los movimientos de inventario dentro de un rango de fechas."""
+        query = """
+            SELECT * FROM log_inventario
+            WHERE fecha BETWEEN ? AND ?
+            ORDER BY fecha DESC
+        """
+        cursor = self.execute_query(query, (fecha_inicio, fecha_fin))
+        return [dict(row) for row in cursor.fetchall()]
+
     # --- Métodos para Usuarios ---
     def insert_user(self, user: Usuario):
         self.execute_query('''
@@ -321,9 +332,15 @@ class DatabaseManager:
         self.commit()
 
     def is_parametro_in_use(self, tipo_parametro: str, valor: str) -> bool:
+        if tipo_parametro == 'dominio_correo':
+            query = "SELECT 1 FROM equipos WHERE email_asignado LIKE ? LIMIT 1"
+            cursor = self.execute_query(query, (f'%@{valor}',))
+            return cursor.fetchone() is not None
+
         columna_equipo = tipo_parametro.split('_')[0]
         if columna_equipo not in ['tipo', 'marca']:
             return False
+        
         query = f"SELECT 1 FROM equipos WHERE {columna_equipo} = ? LIMIT 1"
         cursor = self.execute_query(query, (valor,))
         return cursor.fetchone() is not None

@@ -12,12 +12,14 @@ from gestion_inventario import (
     registrar_equipo, gestionar_equipos,
     menu_gestionar_pendientes
 )
-from gestion_reportes import menu_ver_inventario  # <-- Se importa desde el nuevo archivo
+from gestion_reportes import menu_ver_inventario
 from gestion_acceso import (
     login, menu_usuarios, menu_configuracion_sistema,
     cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS,
     menu_ver_log_sistema
 )
+# MODIFICACIÓN: Importar el nuevo módulo de dashboard
+from dashboard import mostrar_dashboard
 
 load_dotenv()
 
@@ -140,22 +142,28 @@ def menu_principal():
         print(Fore.BLUE + "═" * 80 + Style.RESET_ALL)
         
         # --- MENÚ PRINCIPAL ACTUALIZADO ---
+        # MODIFICACIÓN: Añadida la opción del Dashboard
         opciones_principales = [
+            "Estadísticas de Inventario",
             "Gestión de Inventario",
-            "Ver Inventario",  # <-- Nueva opción
+            "Ver Inventario y Reportes",
             "Gestión de Acceso y Sistema",
             "Salir"
         ]
         mostrar_menu(opciones_principales, titulo="Módulos del Sistema")
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo: " + Style.RESET_ALL).strip()
+        
+        # MODIFICACIÓN: Lógica para manejar la nueva opción
         if opcion == '1':
-            menu_gestion_inventario(usuario_logueado)
+            mostrar_dashboard(usuario_logueado)
         elif opcion == '2':
-            menu_ver_inventario(usuario_logueado)  # <-- Llama a la nueva función
+            menu_gestion_inventario(usuario_logueado)
         elif opcion == '3':
-            menu_gestion_acceso_sistema(usuario_logueado)
+            menu_ver_inventario(usuario_logueado)
         elif opcion == '4':
+            menu_gestion_acceso_sistema(usuario_logueado)
+        elif opcion == '5':
             break
         else:
             print(Fore.RED + "\n❌ Opción no válida.")
