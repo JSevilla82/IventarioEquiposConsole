@@ -8,12 +8,13 @@ from ui import (
     mostrar_encabezado, mostrar_menu, pausar_pantalla
 )
 from gestion_inventario import (
-    registrar_equipo, gestionar_equipos, ver_inventario_consola,
-    generar_excel_inventario, menu_gestionar_pendientes, menu_reportes
+    registrar_equipo, gestionar_equipos, menu_ver_inventario_excel,
+    menu_gestionar_pendientes
 )
 from gestion_acceso import (
-    login, menu_usuarios, menu_ver_historico, menu_configuracion_sistema,
-    cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS
+    login, menu_usuarios, menu_configuracion_sistema,
+    cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS,
+    menu_ver_log_sistema
 )
 
 load_dotenv()
@@ -25,29 +26,51 @@ def menu_gestion_inventario(usuario: str):
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         opciones_disponibles = []
-        if "registrar_equipo" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Registrar nuevo equipo")
-        # --- Texto del menú actualizado ---
-        if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestionar Equipos")
-        if "ver_inventario" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Ver inventario (Consola/Excel)")
-        if "generar_reporte" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Generar reportes avanzados")
-        if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestionar Mantenimientos y Devoluciones")
+        
+        # Construcción dinámica del menú
+        if "registrar_equipo" in ROLES_PERMISOS[rol_actual]: 
+            opciones_disponibles.append("Registrar nuevo equipo")
+        if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: 
+            opciones_disponibles.append("Gestionar Equipos")
+        if "ver_inventario" in ROLES_PERMISOS[rol_actual]: 
+            opciones_disponibles.append("Ver Inventario en Excel")
+        
+        if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]:
+            # Consultar cantidad de pendientes
+            mantenimientos_pendientes = len([e for e in db_manager.get_all_equipos() if e.get('estado') == "En mantenimiento"])
+            devoluciones_pendientes = len([e for e in db_manager.get_all_equipos() if e.get('estado') == "Pendiente Devolución a Proveedor"])
+            total_pendientes = mantenimientos_pendientes + devoluciones_pendientes
+            
+            # Asignar color según la cantidad
+            color = Fore.GREEN
+            if total_pendientes == 1:
+                color = Fore.YELLOW
+            elif total_pendientes > 1:
+                color = Fore.RED
+            
+            # Formatear texto del menú
+            texto_menu_pendientes = f"Gestionar Mantenimientos y Devoluciones {color}({total_pendientes} Pendientes){Style.RESET_ALL}"
+            opciones_disponibles.append(texto_menu_pendientes)
+
         opciones_disponibles.append("Volver al menú principal")
 
         mostrar_menu(opciones_disponibles, titulo="Módulo de Gestión de Inventario")
-        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+        opcion_input = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
         
         try:
-            opcion_idx = int(opcion) - 1
-            if 0 <= opcion_idx < len(opciones_disponibles):
-                opcion_texto = opciones_disponibles[opcion_idx]
-                if opcion_texto == "Registrar nuevo equipo": registrar_equipo(usuario)
-                # --- Llamada a la función actualizada ---
-                elif opcion_texto == "Gestionar Equipos": gestionar_equipos(usuario)
-                elif opcion_texto == "Ver inventario (Consola/Excel)": menu_ver_inventario(usuario)
-                elif opcion_texto == "Generar reportes avanzados": menu_reportes(usuario)
-                elif opcion_texto == "Gestionar Mantenimientos y Devoluciones": menu_gestionar_pendientes(usuario)
-                elif opcion_texto == "Volver al menú principal": break
-            else: print(Fore.RED + "Opción no válida.")
+            opciones_map = {str(i+1): texto for i, texto in enumerate(opciones_disponibles)}
+            opcion_texto = opciones_map.get(opcion_input)
+
+            if opcion_texto == "Registrar nuevo equipo": registrar_equipo(usuario)
+            elif opcion_texto == "Gestionar Equipos": gestionar_equipos(usuario)
+            elif opcion_texto == "Ver Inventario en Excel": menu_ver_inventario_excel(usuario)
+            elif opcion_texto and "Gestionar Mantenimientos y Devoluciones" in opcion_texto:
+                menu_gestionar_pendientes(usuario)
+            elif opcion_texto == "Volver al menú principal": break
+            else: 
+                print(Fore.RED + "Opción no válida.")
+                pausar_pantalla()
+
         except (ValueError, IndexError):
             print(Fore.RED + "Entrada no válida.")
 
@@ -59,8 +82,8 @@ def menu_gestion_acceso_sistema(usuario: str):
         os.system('cls' if os.name == 'nt' else 'clear')
         opciones_disponibles = []
         if "gestionar_usuarios" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestión de usuarios")
-        if "ver_historico" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Ver histórico de movimientos")
         if "configurar_sistema" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Configuración del Sistema")
+        if "ver_historico" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Ver Log de Actividad del Sistema")
         opciones_disponibles.append("Cambiar mi contraseña")
         opciones_disponibles.append("Volver al menú principal")
         
@@ -72,22 +95,13 @@ def menu_gestion_acceso_sistema(usuario: str):
             if 0 <= opcion_idx < len(opciones_disponibles):
                 opcion_texto = opciones_disponibles[opcion_idx]
                 if opcion_texto == "Gestión de usuarios": menu_usuarios(usuario)
-                elif opcion_texto == "Ver histórico de movimientos": menu_ver_historico(usuario)
                 elif opcion_texto == "Configuración del Sistema": menu_configuracion_sistema(usuario)
+                elif opcion_texto == "Ver Log de Actividad del Sistema": menu_ver_log_sistema(usuario)
                 elif opcion_texto == "Cambiar mi contraseña": cambiar_contrasena_usuario(usuario)
                 elif opcion_texto == "Volver al menú principal": break
             else: print(Fore.RED + "Opción no válida.")
         except (ValueError, IndexError):
             print(Fore.RED + "Entrada no válida.")
-
-def menu_ver_inventario(usuario: str):
-    while True:
-        mostrar_menu(["Ver en Consola", "Exportar a Excel (Completo)", "Volver"], titulo="Ver Inventario")
-        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
-        if opcion == '1': ver_inventario_consola()
-        elif opcion == '2': generar_excel_inventario(usuario)
-        elif opcion == '3': break
-        else: print(Fore.RED + "Opción no válida.")
 
 def menu_principal():
     inicializar_admin_si_no_existe()

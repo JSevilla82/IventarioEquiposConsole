@@ -12,7 +12,8 @@ class Equipo:
                  fecha_registro: Optional[str] = None,
                  fecha_devolucion_prestamo: Optional[str] = None,
                  fecha_devolucion_proveedor: Optional[str] = None,
-                 motivo_devolucion: Optional[str] = None):
+                 motivo_devolucion: Optional[str] = None,
+                 estado_anterior: Optional[str] = None):
         self.placa = placa
         self.tipo = tipo
         self.marca = marca
@@ -26,11 +27,12 @@ class Equipo:
         self.fecha_devolucion_prestamo = fecha_devolucion_prestamo
         self.fecha_devolucion_proveedor = fecha_devolucion_proveedor
         self.motivo_devolucion = motivo_devolucion
+        self.estado_anterior = estado_anterior
 
     def to_dict(self) -> Dict:
         return self.__dict__
 
-class MovimientoHistorico:
+class LogInventario:
     def __init__(self, equipo_placa: str, accion: str, detalles: str, usuario: str, fecha: Optional[str] = None):
         self.equipo_placa = equipo_placa
         self.accion = accion
@@ -38,8 +40,12 @@ class MovimientoHistorico:
         self.usuario = usuario
         self.fecha = fecha if fecha else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def to_dict(self) -> Dict:
-        return self.__dict__
+class LogSistema:
+    def __init__(self, accion: str, detalles: str, usuario: str, fecha: Optional[str] = None):
+        self.accion = accion
+        self.detalles = detalles
+        self.usuario = usuario
+        self.fecha = fecha if fecha else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 class Usuario:
     def __init__(self, nombre_usuario: str, contrasena_hash: str, rol: str, nombre_completo: Optional[str] = None, cambio_clave_requerido: bool = True, is_active: bool = True):
@@ -82,13 +88,21 @@ class DatabaseManager:
                 modelo TEXT NOT NULL, serial TEXT NOT NULL, estado TEXT NOT NULL,
                 asignado_a TEXT, email_asignado TEXT, observaciones TEXT,
                 fecha_registro TEXT, fecha_devolucion_prestamo TEXT, 
-                fecha_devolucion_proveedor TEXT, motivo_devolucion TEXT
+                fecha_devolucion_proveedor TEXT, motivo_devolucion TEXT,
+                estado_anterior TEXT 
             )
         ''')
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS historico (
+            CREATE TABLE IF NOT EXISTS log_inventario (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, equipo_placa TEXT NOT NULL,
-                accion TEXT NOT NULL, detalles TEXT NOT NULL, usuario TEXT NOT NULL, fecha TEXT NOT NULL
+                accion TEXT NOT NULL, detalles TEXT NOT NULL, usuario TEXT NOT NULL, fecha TEXT NOT NULL,
+                FOREIGN KEY (equipo_placa) REFERENCES equipos (placa)
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS log_sistema (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, accion TEXT NOT NULL, 
+                detalles TEXT NOT NULL, usuario TEXT NOT NULL, fecha TEXT NOT NULL
             )
         ''')
         cursor.execute('''
@@ -111,11 +125,13 @@ class DatabaseManager:
         self.conn.commit()
 
     def add_missing_columns(self):
+        # ... (código sin cambios) ...
         columns_to_add = {
             'equipos': [
                 ('fecha_devolucion_prestamo', 'TEXT'),
                 ('fecha_devolucion_proveedor', 'TEXT'),
-                ('motivo_devolucion', 'TEXT')
+                ('motivo_devolucion', 'TEXT'),
+                ('estado_anterior', 'TEXT')
             ],
             'usuarios': [
                 ('nombre_completo', 'TEXT'),
@@ -146,9 +162,9 @@ class DatabaseManager:
     # --- Métodos para Equipos ---
     def insert_equipo(self, equipo: Equipo):
         self.execute_query('''
-            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion))
+            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion, estado_anterior)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior))
         self.commit()
 
     def get_all_equipos(self) -> List[Dict]:
@@ -164,26 +180,41 @@ class DatabaseManager:
         self.execute_query('''
             UPDATE equipos SET tipo = ?, marca = ?, modelo = ?, serial = ?, estado = ?, asignado_a = ?,
             email_asignado = ?, observaciones = ?, fecha_devolucion_prestamo = ?, fecha_devolucion_proveedor = ?,
-            motivo_devolucion = ? WHERE placa = ?
+            motivo_devolucion = ?, estado_anterior = ? WHERE placa = ?
         ''', (equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a,
               equipo.email_asignado, equipo.observaciones, equipo.fecha_devolucion_prestamo,
-              equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.placa))
+              equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, equipo.placa))
         self.commit()
 
     def delete_equipo(self, placa: str):
         self.execute_query('DELETE FROM equipos WHERE placa = ?', (placa,))
         self.commit()
 
-    # --- Métodos para Histórico ---
-    def insert_movimiento(self, movimiento: MovimientoHistorico):
+    # --- Métodos para Logs ---
+    def insert_log_inventario(self, log: LogInventario):
         self.execute_query('''
-            INSERT INTO historico (equipo_placa, accion, detalles, usuario, fecha) VALUES (?, ?, ?, ?, ?)
-        ''', (movimiento.equipo_placa, movimiento.accion, movimiento.detalles, movimiento.usuario, movimiento.fecha))
+            INSERT INTO log_inventario (equipo_placa, accion, detalles, usuario, fecha) VALUES (?, ?, ?, ?, ?)
+        ''', (log.equipo_placa, log.accion, log.detalles, log.usuario, log.fecha))
         self.commit()
 
-    def get_all_historico(self) -> List[Dict]:
-        cursor = self.execute_query('SELECT * FROM historico ORDER BY fecha DESC')
+    def insert_log_sistema(self, log: LogSistema):
+        self.execute_query('''
+            INSERT INTO log_sistema (accion, detalles, usuario, fecha) VALUES (?, ?, ?, ?)
+        ''', (log.accion, log.detalles, log.usuario, log.fecha))
+        self.commit()
+
+    def get_all_log_inventario(self) -> List[Dict]:
+        cursor = self.execute_query('SELECT * FROM log_inventario ORDER BY fecha DESC')
         return [dict(row) for row in cursor.fetchall()]
+
+    def get_all_log_sistema(self) -> List[Dict]:
+        cursor = self.execute_query('SELECT * FROM log_sistema ORDER BY fecha DESC')
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_last_movimiento_by_placa(self, placa: str) -> Optional[Dict]:
+        cursor = self.execute_query('SELECT * FROM log_inventario WHERE equipo_placa = ? ORDER BY fecha DESC LIMIT 1', (placa,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
     # --- Métodos para Usuarios ---
     def insert_user(self, user: Usuario):
@@ -233,16 +264,17 @@ class DatabaseManager:
         query = f"SELECT 1 FROM equipos WHERE {columna_equipo} = ? LIMIT 1"
         cursor = self.execute_query(query, (valor,))
         return cursor.fetchone() is not None
-
-    # --- *** MÉTODO AÑADIDO *** ---
+        
     def delete_parametro(self, tipo: str, valor: str):
-        """Elimina un parámetro de la base de datos."""
         self.execute_query('DELETE FROM parametros WHERE tipo = ? AND valor = ?', (tipo, valor))
         self.commit()
 
 db_manager = DatabaseManager("inventario.db")
 
-# --- FUNCIONES DE PERSISTENCIA ---
-def registrar_movimiento(placa: str, accion: str, detalles: str, usuario: str):
-    movimiento = MovimientoHistorico(placa, accion, detalles, usuario)
-    db_manager.insert_movimiento(movimiento)
+def registrar_movimiento_inventario(placa: str, accion: str, detalles: str, usuario: str):
+    log = LogInventario(placa, accion, detalles, usuario)
+    db_manager.insert_log_inventario(log)
+
+def registrar_movimiento_sistema(accion: str, detalles: str, usuario: str):
+    log = LogSistema(accion, detalles, usuario)
+    db_manager.insert_log_sistema(log)

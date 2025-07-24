@@ -14,10 +14,10 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from colorama import Fore, Back, Style
 
-from database import db_manager, Usuario, registrar_movimiento
+from database import db_manager, Usuario, registrar_movimiento_sistema
 import ui
 
-# --- (El código de RBAC, requiere_permiso y autenticación no ha cambiado) ---
+# --- CONTROL DE ACCESO BASADO EN ROLES (RBAC) ---
 ROLES_PERMISOS = {
     "Administrador": {
         "registrar_equipo", "ver_inventario", "gestionar_equipo", "ver_historico",
@@ -55,6 +55,7 @@ def requiere_permiso(permiso: str) -> Callable:
         return wrapper
     return decorator
 
+# --- FUNCIONES DE AUTENTICACIÓN Y GESTIÓN DE USUARIOS ---
 def hash_contrasena(contrasena: str) -> str:
     return bcrypt.hashpw(contrasena.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -88,7 +89,6 @@ def login():
 
 @requiere_permiso("gestionar_usuarios")
 def registrar_usuario(usuario_actual: str):
-    #... (código sin cambios)
     ui.mostrar_encabezado("Registrar Nuevo Usuario")
     print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar.")
     try:
@@ -110,7 +110,7 @@ def registrar_usuario(usuario_actual: str):
 
         nuevo_usuario = Usuario(nombre_usuario, hash_contrasena(contrasena), rol, nombre_completo, True, True)
         db_manager.insert_user(nuevo_usuario)
-        registrar_movimiento("SISTEMA", "Registro Usuario", f"Usuario '{nombre_usuario}' ({rol}) registrado por {usuario_actual}", usuario_actual)
+        registrar_movimiento_sistema("Registro Usuario", f"Usuario '{nombre_usuario}' ({rol}) registrado por {usuario_actual}", usuario_actual)
         print(Fore.GREEN + f"\n✅ Usuario '{nombre_usuario}' registrado.")
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación cancelada.")
@@ -118,7 +118,6 @@ def registrar_usuario(usuario_actual: str):
         ui.pausar_pantalla()
 
 def cambiar_contrasena_usuario(nombre_usuario: str, forzar_cambio: bool = False):
-    #... (código sin cambios)
     ui.mostrar_encabezado(f"Cambiar Contraseña para {nombre_usuario}")
     print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar.")
     user_data = db_manager.get_user_by_username(nombre_usuario)
@@ -137,16 +136,14 @@ def cambiar_contrasena_usuario(nombre_usuario: str, forzar_cambio: bool = False)
         user_obj.contrasena_hash = hash_contrasena(new_password)
         user_obj.cambio_clave_requerido = False
         db_manager.update_user(user_obj)
-        registrar_movimiento("SISTEMA", "Cambio Contraseña", f"Contraseña cambiada para '{nombre_usuario}'", nombre_usuario)
+        registrar_movimiento_sistema("Cambio Contraseña", f"Contraseña cambiada para '{nombre_usuario}'", nombre_usuario)
         print(Fore.GREEN + "\n✅ Contraseña cambiada exitosamente.")
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación cancelada.")
     finally:
         ui.pausar_pantalla()
 
-
 def inicializar_admin_si_no_existe():
-    #... (código sin cambios)
     if not db_manager.get_user_by_username("admin"):
         print(Fore.YELLOW + "\nCreando usuario administrador inicial 'admin'...")
         admin_pass_hash = hash_contrasena("adminpass")
@@ -157,7 +154,6 @@ def inicializar_admin_si_no_existe():
 
 @requiere_permiso("gestionar_usuarios")
 def menu_usuarios(usuario_actual: str):
-    #... (código sin cambios)
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         ui.mostrar_encabezado("Gestión de Usuarios")
@@ -198,7 +194,6 @@ def menu_usuarios(usuario_actual: str):
             ui.pausar_pantalla()
 
 def gestionar_usuario_especifico(admin_usuario: str, target_user_data: Dict):
-    #... (código sin cambios)
     target_user_obj = Usuario(**db_manager.get_user_by_username(target_user_data['nombre_usuario']))
     
     while True:
@@ -224,7 +219,7 @@ def gestionar_usuario_especifico(admin_usuario: str, target_user_data: Dict):
             if nuevo_nombre:
                 target_user_obj.nombre_completo = nuevo_nombre
                 db_manager.update_user(target_user_obj)
-                registrar_movimiento("SISTEMA", "Modificación Usuario", f"Nombre de '{target_user_obj.nombre_usuario}' cambiado a '{nuevo_nombre}' por {admin_usuario}", admin_usuario)
+                registrar_movimiento_sistema("Modificación Usuario", f"Nombre de '{target_user_obj.nombre_usuario}' cambiado a '{nuevo_nombre}' por {admin_usuario}", admin_usuario)
                 print(Fore.GREEN + "Nombre actualizado.")
         elif opcion == '2':
             nueva_pass = getpass.getpass(Fore.YELLOW + f"Ingrese la nueva contraseña para {target_user_obj.nombre_usuario}: " + Style.RESET_ALL)
@@ -232,7 +227,7 @@ def gestionar_usuario_especifico(admin_usuario: str, target_user_data: Dict):
                 target_user_obj.contrasena_hash = hash_contrasena(nueva_pass)
                 target_user_obj.cambio_clave_requerido = True
                 db_manager.update_user(target_user_obj)
-                registrar_movimiento("SISTEMA", "Reset Contraseña", f"Contraseña de '{target_user_obj.nombre_usuario}' reseteada por {admin_usuario}", admin_usuario)
+                registrar_movimiento_sistema("Reset Contraseña", f"Contraseña de '{target_user_obj.nombre_usuario}' reseteada por {admin_usuario}", admin_usuario)
                 print(Fore.GREEN + "Contraseña reseteada. El usuario deberá cambiarla al iniciar sesión.")
             else:
                 print(Fore.RED + "La contraseña no cumple los requisitos de longitud.")
@@ -240,7 +235,7 @@ def gestionar_usuario_especifico(admin_usuario: str, target_user_data: Dict):
             target_user_obj.is_active = not target_user_obj.is_active
             db_manager.update_user(target_user_obj)
             accion_log = "bloqueado" if not target_user_obj.is_active else "desbloqueado"
-            registrar_movimiento("SISTEMA", "Estado Usuario", f"Acceso de '{target_user_obj.nombre_usuario}' {accion_log} por {admin_usuario}", admin_usuario)
+            registrar_movimiento_sistema("Estado Usuario", f"Acceso de '{target_user_obj.nombre_usuario}' {accion_log} por {admin_usuario}", admin_usuario)
             print(Fore.GREEN + f"Acceso {accion_log}.")
         elif opcion == '4':
             break
@@ -249,38 +244,36 @@ def gestionar_usuario_especifico(admin_usuario: str, target_user_data: Dict):
         ui.pausar_pantalla()
 
 @requiere_permiso("ver_historico")
-def menu_ver_historico(usuario: str):
-    #... (código sin cambios)
+def menu_ver_log_sistema(usuario: str):
     while True:
-        ui.mostrar_menu(["Ver en Excel", "Volver"], titulo="Histórico de Movimientos")
+        ui.mostrar_menu(["Ver Log en Excel", "Volver"], titulo="Log de Actividad del Sistema")
         opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
         if opcion == '1':
-            generar_excel_historico(usuario)
+            generar_excel_log_sistema(usuario)
         elif opcion == '2':
             break
         else:
             print(Fore.RED + "Opción no válida.")
 
 @requiere_permiso("ver_historico")
-def generar_excel_historico(usuario: str):
-    #... (código sin cambios)
+def generar_excel_log_sistema(usuario: str):
     try:
-        historico = db_manager.get_all_historico()
+        log_sistema = db_manager.get_all_log_sistema()
 
-        if not historico:
-            print(Fore.YELLOW + "\nNo hay movimientos históricos para exportar.")
+        if not log_sistema:
+            print(Fore.YELLOW + "\nNo hay actividad del sistema para exportar.")
             ui.pausar_pantalla()
             return
 
         wb = Workbook()
         ws = wb.active
-        ws.title = "Histórico de Movimientos"
+        ws.title = "Log del Sistema"
 
-        header_fill = PatternFill(start_color="808080", end_color="808080", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
+        header_fill = PatternFill(start_color="BFBFBF", end_color="BFBFBF", fill_type="solid")
+        header_font = Font(color="000000", bold=True)
         border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         
-        encabezados = ["FECHA", "PLACA EQUIPO", "ACCIÓN", "USUARIO", "DETALLES"]
+        encabezados = ["FECHA", "ACCIÓN", "USUARIO", "DETALLES"]
         
         for col_num, encabezado in enumerate(encabezados, 1):
             col_letra = get_column_letter(col_num)
@@ -291,21 +284,19 @@ def generar_excel_historico(usuario: str):
             celda.alignment = Alignment(horizontal='center')
             celda.border = border
         
-        ws.column_dimensions['A'].width = 25 # Fecha
-        ws.column_dimensions['B'].width = 20 # Placa
-        ws.column_dimensions['C'].width = 25 # Acción
-        ws.column_dimensions['D'].width = 20 # Usuario
-        ws.column_dimensions['E'].width = 80 # Detalles
+        ws.column_dimensions['A'].width = 25
+        ws.column_dimensions['B'].width = 25
+        ws.column_dimensions['C'].width = 20
+        ws.column_dimensions['D'].width = 80
 
-        for row_num, mov in enumerate(historico, 2):
+        for row_num, mov in enumerate(log_sistema, 2):
             fecha_obj = datetime.strptime(mov['fecha'], "%Y-%m-%d %H:%M:%S")
             fecha_formateada = fecha_obj.strftime("%d/%m/%Y %H:%M")
             
             ws.cell(row=row_num, column=1, value=fecha_formateada).border = border
-            ws.cell(row=row_num, column=2, value=mov.get('equipo_placa', 'N/A')).border = border
-            ws.cell(row=row_num, column=3, value=mov.get('accion', 'N/A')).border = border
-            ws.cell(row=row_num, column=4, value=mov.get('usuario', 'N/A')).border = border
-            ws.cell(row=row_num, column=5, value=mov.get('detalles', '')).border = border
+            ws.cell(row=row_num, column=2, value=mov.get('accion', 'N/A')).border = border
+            ws.cell(row=row_num, column=3, value=mov.get('usuario', 'N/A')).border = border
+            ws.cell(row=row_num, column=4, value=mov.get('detalles', '')).border = border
         
         ws.freeze_panes = "A2"
 
@@ -313,18 +304,16 @@ def generar_excel_historico(usuario: str):
             wb.save(tmp.name)
             ruta_temporal = tmp.name
 
-        registrar_movimiento("SISTEMA", "Reporte Histórico Excel", "Generado reporte de histórico", usuario)
-        print(Fore.GREEN + f"\n✅ Abriendo el reporte de histórico en Excel..." + Style.RESET_ALL)
+        print(Fore.GREEN + f"\n✅ Abriendo el log de actividad del sistema en Excel..." + Style.RESET_ALL)
         webbrowser.open(ruta_temporal)
 
     except Exception as e:
-        print(Fore.RED + f"\n❌ Error al generar el reporte de histórico: {str(e)}" + Style.RESET_ALL)
+        print(Fore.RED + f"\n❌ Error al generar el log del sistema: {str(e)}" + Style.RESET_ALL)
     finally:
         ui.pausar_pantalla()
 
 @requiere_permiso("configurar_sistema")
 def menu_configuracion_sistema(usuario: str):
-    #... (código sin cambios)
     while True:
         ui.mostrar_menu(["Gestionar Tipos de Equipo", "Gestionar Marcas", "Volver"], titulo="Configuración del Sistema")
         opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
@@ -337,8 +326,6 @@ def menu_configuracion_sistema(usuario: str):
         else:
             print(Fore.RED + "Opción no válida.")
 
-
-# --- *** FUNCIÓN MODIFICADA *** ---
 def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str):
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -368,7 +355,6 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
         accion = opciones_validas.get(opcion)
 
         if accion == "add":
-            # (El código de esta sección no ha cambiado)
             try:
                 while True:
                     nuevo_valor = input(Fore.YELLOW + f"Paso 1: Ingrese el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip()
@@ -393,7 +379,7 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
                 if confirmacion_final == 'S':
                     try:
                         db_manager.add_parametro(tipo_parametro, nuevo_valor)
-                        registrar_movimiento("SISTEMA", "Configuración", f"Añadido {nombre_amigable}: '{nuevo_valor}'", usuario)
+                        registrar_movimiento_sistema("Configuración", f"Añadido {nombre_amigable}: '{nuevo_valor}'", usuario)
                         print(Fore.GREEN + f"\n✅ {nombre_amigable} '{nuevo_valor}' añadido con éxito.")
                     except sqlite3.IntegrityError:
                         print(Fore.RED + f"\n❌ El {nombre_amigable} '{nuevo_valor}' ya existe.")
@@ -405,7 +391,6 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
                 ui.pausar_pantalla()
 
         elif accion == "toggle":
-            # (El código de esta sección no ha cambiado)
             if not items:
                 print(Fore.RED + f"No hay {nombre_amigable}s para gestionar.")
                 ui.pausar_pantalla()
@@ -425,14 +410,13 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
                 nuevo_estado = not es_activo_actualmente
                 db_manager.update_parametro_status(tipo_parametro, valor_a_gestionar, nuevo_estado)
                 accion_log = "activado" if nuevo_estado else "inactivado"
-                registrar_movimiento("SISTEMA", "Configuración", f"{nombre_amigable} '{valor_a_gestionar}' {accion_log}", usuario)
+                registrar_movimiento_sistema("Configuración", f"{nombre_amigable} '{valor_a_gestionar}' {accion_log}", usuario)
                 print(Fore.GREEN + f"\n✅ {nombre_amigable} '{valor_a_gestionar}' {accion_log} con éxito.")
             else:
                 print(Fore.RED + f"El {nombre_amigable} '{valor_a_gestionar}' no fue encontrado.")
             ui.pausar_pantalla()
 
         elif accion == "delete":
-            # (El código de esta sección no ha cambiado)
             if not items:
                 print(Fore.RED + f"No hay {nombre_amigable}s para eliminar.")
                 ui.pausar_pantalla()
@@ -454,7 +438,7 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
             confirmacion = input(Fore.RED + f"⚠️ ¿Seguro de eliminar el parámetro '{valor_a_eliminar}'? Esta acción es irreversible. (Escriba 'SI'): " + Style.RESET_ALL).strip().upper()
             if confirmacion == "SI":
                 db_manager.delete_parametro(tipo_parametro, valor_a_eliminar)
-                registrar_movimiento("SISTEMA", "Configuración", f"Eliminado {nombre_amigable}: '{valor_a_eliminar}'", usuario)
+                registrar_movimiento_sistema("Configuración", f"Eliminado {nombre_amigable}: '{valor_a_eliminar}'", usuario)
                 print(Fore.GREEN + f"\n✅ Parámetro '{valor_a_eliminar}' eliminado con éxito.")
             else:
                 print(Fore.YELLOW + "\nOperación de eliminación cancelada.")
