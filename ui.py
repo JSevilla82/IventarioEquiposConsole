@@ -1,5 +1,6 @@
 # ui.py
-from colorama import init, Fore, Style
+import os
+from colorama import init, Fore, Style, Back
 from typing import List
 
 # Inicializar colorama
@@ -9,17 +10,31 @@ init(autoreset=True)
 USUARIO_ACTUAL = None
 
 def mostrar_encabezado(titulo: str, ancho: int = 80, color: str = Fore.CYAN):
-    """Muestra un encabezado con formato en la consola."""
-    print("\n" + color + "═" * ancho)
-    print(f" {titulo.upper()} ".center(ancho, ' '))
-    print("═" * ancho + Style.RESET_ALL)
+    """Limpia la pantalla y muestra un encabezado permanente y uno específico."""
+    # Limpiar pantalla
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+    # Encabezado permanente
+    print(Fore.WHITE + Style.BRIGHT + "═" * ancho)
+    print(Back.WHITE + Style.DIM + Fore.BLACK + " Control de Inventario de Equipos (CIE) ".center(ancho, ' ') + Style.RESET_ALL)
+    print(Back.WHITE + Fore.BLACK + Style.BRIGHT + " Powered by Jairo Sevilla ".center(ancho, ' ') + Style.RESET_ALL)
+    print(Fore.WHITE + Style.BRIGHT + "═" * ancho + Style.RESET_ALL)
+
+    # Encabezado específico del menú
+    if titulo:
+        print("\n" + color + Style.BRIGHT + f" {titulo.upper()} ".center(ancho, ' ') + Style.RESET_ALL)
+        print(color + "─" * ancho + Style.RESET_ALL)
+
 
 def mostrar_menu(opciones: List[str], titulo: str):
     """Muestra un menú de opciones con formato."""
-    mostrar_encabezado(titulo, color=Fore.MAGENTA)
+    # Se usa color blanco para el título del menú
+    mostrar_encabezado(titulo, color=Fore.WHITE)
     for i, opcion in enumerate(opciones, 1):
         print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
-    print(Fore.MAGENTA + "═" * 80 + Style.RESET_ALL)
+    # La línea final del menú ahora es blanca y en negrita
+    print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
+
 
 def pausar_pantalla():
     """Pausa la ejecución hasta que el usuario presione Enter."""

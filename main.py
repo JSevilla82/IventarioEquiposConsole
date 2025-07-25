@@ -31,8 +31,7 @@ def menu_gestion_inventario(usuario: str):
     rol_actual = user_data['rol']
     
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
-
+        # Se elimina os.system('cls'...) de aquí
         opciones_disponibles = []
         
         # Construcción dinámica del menú
@@ -41,7 +40,6 @@ def menu_gestion_inventario(usuario: str):
         if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: 
             opciones_disponibles.append("Gestionar Equipos")
         
-        # MODIFICADO: Añadido conteo de renovaciones pendientes
         if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]:
             equipos = db_manager.get_all_equipos()
             mantenimientos_pendientes = len([e for e in equipos if e.get('estado') == "En mantenimiento"])
@@ -90,7 +88,7 @@ def menu_gestion_acceso_sistema(usuario: str):
     rol_actual = user_data['rol']
     
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
+        # Se elimina os.system('cls'...) de aquí
         opciones_disponibles = []
         if "gestionar_usuarios" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestión de usuarios")
         if "configurar_sistema" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Configuración del Sistema")
@@ -116,7 +114,7 @@ def menu_gestion_acceso_sistema(usuario: str):
 
 def menu_accesos_rapidos():
     """Muestra una pantalla con la lista de accesos rápidos disponibles."""
-    os.system('cls' if os.name == 'nt' else 'clear')
+    # Se elimina os.system('cls'...) de aquí
     mostrar_encabezado("Accesos Rápidos Disponibles", color=Fore.CYAN)
     print(f"  {Fore.YELLOW}rq{Style.RESET_ALL}  - Registrar un nuevo equipo")
     print(f"  {Fore.YELLOW}gq{Style.RESET_ALL}  - Gestionar un equipo existente")
@@ -155,12 +153,7 @@ def menu_principal():
     rol_actual = user_data['rol']
 
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print(Fore.BLUE + "═" * 80)
-        print(Back.BLUE + Fore.WHITE + f" MENÚ PRINCIPAL - Usuario: {usuario_logueado} (Rol: {rol_actual}) ".center(80, ' ') + Style.RESET_ALL)
-        if ENVIRONMENT == 'development':
-            print(Back.YELLOW + Fore.BLACK + "--- MODO DESARROLLO ---".center(80, ' ') + Style.RESET_ALL)
-        print(Fore.BLUE + "═" * 80 + Style.RESET_ALL)
+        # La limpieza y el encabezado ahora son manejados por mostrar_menu
         
         opciones_principales = [
             "Estadísticas de Inventario",
@@ -170,7 +163,13 @@ def menu_principal():
             "Aprender Accesos Rápidos",
             "Salir"
         ]
-        mostrar_menu(opciones_principales, titulo="Módulos del Sistema")
+        
+        # Construimos un título dinámico para el menú principal
+        titulo_principal = f"MENÚ PRINCIPAL - Usuario: {usuario_logueado} (Rol: {rol_actual})"
+        if ENVIRONMENT == 'development':
+            titulo_principal += " --- MODO DESARROLLO ---"
+        
+        mostrar_menu(opciones_principales, titulo=titulo_principal)
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido: " + Style.RESET_ALL).strip().lower()
         
