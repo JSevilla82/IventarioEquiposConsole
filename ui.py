@@ -26,10 +26,6 @@ def pausar_pantalla():
     input(Fore.CYAN + "\nPresione Enter para continuar..." + Style.RESET_ALL)
 
 def confirmar_con_placa(placa_correcta: str) -> bool:
-    """
-    Pide al usuario que reingrese la placa para confirmar.
-    Permite múltiples intentos y una opción para cancelar.
-    """
     while True:
         print(Fore.CYAN + "💡 Escriba 'C' para cancelar la operación." + Style.RESET_ALL)
         confirmacion_placa = input(Fore.YELLOW + "🔑 Para confirmar, ingrese la placa del equipo: " + Style.RESET_ALL).strip().upper()
