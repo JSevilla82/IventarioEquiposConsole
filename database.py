@@ -184,6 +184,31 @@ class DatabaseManager:
         cursor = self.execute_query("SELECT * FROM equipos WHERE estado != 'Devuelto a Proveedor'")
         return [dict(row) for row in cursor.fetchall()]
 
+    def count_equipos_activos(self) -> int:
+        """Cuenta el número total de equipos activos."""
+        query = "SELECT COUNT(placa) FROM equipos WHERE estado != 'Devuelto a Proveedor'"
+        cursor = self.execute_query(query)
+        result = cursor.fetchone()
+        return result[0] if result else 0
+
+    def get_equipos_activos_paginated(self, page: int = 1, page_size: int = 20) -> List[Dict]:
+        """Obtiene equipos activos de forma paginada y ordenada."""
+        offset = (page - 1) * page_size
+        query = """
+            SELECT placa, tipo, estado, asignado_a
+            FROM equipos
+            WHERE estado != 'Devuelto a Proveedor'
+            ORDER BY
+                CASE
+                    WHEN estado = 'Asignado' THEN 1
+                    ELSE 0
+                END,
+                estado
+            LIMIT ? OFFSET ?
+        """
+        cursor = self.execute_query(query, (page_size, offset))
+        return [dict(row) for row in cursor.fetchall()]
+
     def get_equipos_devueltos(self) -> List[Dict]:
         cursor = self.execute_query("SELECT * FROM equipos WHERE estado = 'Devuelto a Proveedor'")
         return [dict(row) for row in cursor.fetchall()]

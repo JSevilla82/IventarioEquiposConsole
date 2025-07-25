@@ -26,11 +26,18 @@ from estadisticas import mostrar_estadisticas
 
 load_dotenv()
 
+# main.py
+
 def menu_gestion_inventario(usuario: str):
     user_data = db_manager.get_user_by_username(usuario)
     rol_actual = user_data['rol']
     
     while True:
+        # --- INICIO DE CORRECCIÓN ---
+        # Se añade esta línea para limpiar la pantalla en cada ciclo del menú.
+        mostrar_encabezado("Módulo de Gestión de Inventario")
+        # --- FIN DE CORRECCIÓN ---
+
         opciones_disponibles = []
         
         if "registrar_equipo" in ROLES_PERMISOS[rol_actual]: 
@@ -54,7 +61,12 @@ def menu_gestion_inventario(usuario: str):
         
         opciones_disponibles.append("Volver al menú principal")
 
-        mostrar_menu(opciones_disponibles, titulo="Módulo de Gestión de Inventario")
+        # Se utiliza una función que NO limpia la pantalla
+        mostrar_menu([], titulo="") # Título vacío porque ya lo muestra el encabezado
+        for i, opcion in enumerate(opciones_disponibles, 1):
+            print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
+        print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
+
         opcion_input = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
         
         try:
@@ -81,11 +93,18 @@ def menu_gestion_inventario(usuario: str):
         except (ValueError, IndexError):
             print(Fore.RED + "Entrada no válida.")
 
+# main.py
+
 def menu_gestion_acceso_sistema(usuario: str):
     user_data = db_manager.get_user_by_username(usuario)
     rol_actual = user_data['rol']
     
     while True:
+        # --- INICIO DE CORRECCIÓN ---
+        # Se añade esta línea para limpiar la pantalla.
+        mostrar_encabezado("Módulo de Acceso y Sistema")
+        # --- FIN DE CORRECCIÓN ---
+
         opciones_disponibles = []
         if "gestionar_usuarios" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestión de usuarios")
         if "configurar_sistema" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Configuración del Sistema")
@@ -93,7 +112,12 @@ def menu_gestion_acceso_sistema(usuario: str):
         opciones_disponibles.append("Cambiar mi contraseña")
         opciones_disponibles.append("Volver al menú principal")
         
-        mostrar_menu(opciones_disponibles, titulo="Módulo de Acceso y Sistema")
+        # Se utiliza una función que NO limpia la pantalla
+        mostrar_menu([], titulo="") # Título vacío
+        for i, opcion in enumerate(opciones_disponibles, 1):
+            print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
+        print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
+        
         opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
         
         try:
@@ -123,6 +147,8 @@ def menu_accesos_rapidos():
     print("\n" + Fore.CYAN + "Escribe estos comandos en el menú principal para ir directamente a la función." + Style.RESET_ALL)
     pausar_pantalla()
 
+# main.py
+
 def menu_principal():
     inicializar_admin_si_no_existe()
     
@@ -130,9 +156,8 @@ def menu_principal():
 
     usuario_logueado = None
 
-    import ui # Importar ui al principio
+    import ui
 
-    # Resetear variables de usuario al inicio
     ui.USUARIO_ACTUAL = None
     ui.ROL_ACTUAL = None
     ui.NOMBRE_COMPLETO_USUARIO = None
@@ -146,13 +171,17 @@ def menu_principal():
                 if input(Fore.RED + "¿Salir del programa? (S/N): " + Style.RESET_ALL).strip().upper() == 'S':
                     return
 
-    # Establecer las variables globales de UI después del login
     user_data = db_manager.get_user_by_username(usuario_logueado)
     ui.USUARIO_ACTUAL = usuario_logueado
     ui.ROL_ACTUAL = user_data['rol']
     ui.NOMBRE_COMPLETO_USUARIO = user_data.get('nombre_completo', usuario_logueado)
 
     while True:
+        # --- INICIO DE CORRECCIÓN ---
+        # Se añade esta línea para limpiar la pantalla en cada ciclo del menú.
+        mostrar_encabezado("Menú Principal")
+        # --- FIN DE CORRECCIÓN ---
+        
         opciones_principales = [
             "Estadísticas de Inventario",
             "Gestión de Inventario",
@@ -162,8 +191,11 @@ def menu_principal():
             "Salir"
         ]
         
-        # El título del menú principal ahora es estático
-        mostrar_menu(opciones_principales, titulo="Menú Principal")
+        # Se utiliza una función que NO limpia la pantalla
+        mostrar_menu([], titulo="") # Título vacío
+        for i, opcion in enumerate(opciones_principales, 1):
+            print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
+        print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido: " + Style.RESET_ALL).strip().lower()
         

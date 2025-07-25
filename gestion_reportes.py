@@ -301,24 +301,63 @@ def generar_excel_historico(usuario: str):
     finally:
         pausar_pantalla()
 
+# gestion_reportes.py
+
 @requiere_permiso("ver_inventario")
 def ver_inventario_consola():
-    mostrar_encabezado("Inventario Actual de Equipos Activos")
-    inventario = db_manager.get_equipos_activos()
-    if not inventario:
-        print(Fore.YELLOW + "\nEl inventario activo está vacío.")
-    else:
-        print(f"{Fore.CYAN}{'PLACA':<12} {'TIPO':<15} {'MARCA':<15} {'MODELO':<20} {'ESTADO':<30} {'ASIGNADO A':<20}{Style.RESET_ALL}")
-        print(Fore.CYAN + "="*112 + Style.RESET_ALL)
+    """Muestra el inventario activo en consola con paginación y ordenamiento."""
+    page = 1
+    page_size = 20
+    
+    while True:
+        mostrar_encabezado("Inventario Actual de Equipos Activos")
+        
+        total_equipos = db_manager.count_equipos_activos()
+        if total_equipos == 0:
+            print(Fore.YELLOW + "\nEl inventario activo está vacío.")
+            pausar_pantalla()
+            return
+            
+        total_pages = (total_equipos + page_size - 1) // page_size
+        
+        inventario = db_manager.get_equipos_activos_paginated(page, page_size)
+
+        # --- INICIO DE CORRECCIÓN: Ajuste de anchos de columna ---
+        print(f"{Fore.CYAN}{'PLACA':<15} {'TIPO':<20} {'ESTADO':<35} {'ASIGNADO A'}{Style.RESET_ALL}")
+        print(Fore.CYAN + "="*90 + Style.RESET_ALL)
+        
         for equipo in inventario:
             estado_color = Fore.WHITE
             if equipo['estado'] == "Disponible": estado_color = Fore.GREEN
             elif equipo['estado'] in ["Asignado", "En préstamo"]: estado_color = Fore.YELLOW
             elif equipo['estado'] == "En mantenimiento": estado_color = Fore.MAGENTA
             elif equipo['estado'] == "Pendiente Devolución a Proveedor": estado_color = Fore.LIGHTYELLOW_EX
+            
             asignado_a = equipo.get('asignado_a') or 'N/A'
-            print(f"{equipo['placa']:<12} {equipo['tipo']:<15} {equipo['marca']:<15} {equipo['modelo']:<20} {estado_color}{equipo['estado']:<30}{Style.RESET_ALL} {asignado_a:<20}")
-    pausar_pantalla()
+            
+            print(f"{equipo['placa']:<15} {equipo['tipo']:<20} {estado_color}{equipo['estado']:<35}{Style.RESET_ALL} {asignado_a}")
+        # --- FIN DE CORRECCIÓN ---
+
+        print("\n" + Fore.WHITE + f"Página {page} de {total_pages}" + Style.RESET_ALL)
+        
+        # --- Navegación ---
+        prompt = f"{Fore.CYAN}Presione (s) para siguiente, (a) para anterior, o (q) para salir: {Style.RESET_ALL}"
+        opcion = input(prompt).strip().lower()
+
+        if opcion == 's':
+            if page < total_pages:
+                page += 1
+            else:
+                print(Fore.YELLOW + "Ya estás en la última página.")
+                pausar_pantalla()
+        elif opcion == 'a':
+            if page > 1:
+                page -= 1
+            else:
+                print(Fore.YELLOW + "Ya estás en la primera página.")
+                pausar_pantalla()
+        elif opcion == 'q':
+            break
 
 def generar_excel_historico_equipo(usuario: str, equipo: Equipo):
     """Genera un reporte Excel con el historial de un solo equipo."""

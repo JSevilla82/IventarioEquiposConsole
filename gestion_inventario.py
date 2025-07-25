@@ -261,9 +261,11 @@ def gestionar_equipos(usuario: str):
         print(Fore.CYAN + "\n🚫 Operación de gestión cancelada.")
         pausar_pantalla()
 
+# gestion_inventario.py
+
 def menu_gestion_especifica(usuario: str, equipo: Equipo):
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
+        # La llamada a mostrar_encabezado se encarga de limpiar la pantalla al inicio de cada ciclo.
         mostrar_encabezado(f"Gestionando Equipo - PLACA: {equipo.placa}", color=Fore.GREEN)
         
         print(Fore.CYAN + "--- Información del Equipo ---")
@@ -785,7 +787,8 @@ def registrar_renovacion(usuario: str, equipo_actual: Equipo) -> bool:
 @requiere_permiso("gestionar_pendientes")
 def menu_gestionar_pendientes(usuario: str):
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
+        # Se elimina la limpieza de pantalla redundante. mostrar_encabezado ya lo hace.
+        mostrar_encabezado("Gestionar Mantenimientos, Devoluciones y Renovaciones")
         
         equipos = db_manager.get_all_equipos()
         mantenimientos_pendientes = len([e for e in equipos if e.get('estado') == "En mantenimiento"])
@@ -812,7 +815,8 @@ def menu_gestionar_pendientes(usuario: str):
             "Volver"
         ]
         
-        mostrar_menu(opciones_disponibles, titulo="Gestionar Mantenimientos, Devoluciones y Renovaciones")
+        # El título del menú se pasa directamente a mostrar_menu
+        mostrar_menu(opciones_disponibles, titulo="")
         
         opcion_input = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
         
@@ -830,7 +834,6 @@ def menu_gestionar_pendientes(usuario: str):
         else:
             print(Fore.RED + "Opción no válida.")
             pausar_pantalla()
-            
         
 @requiere_permiso("gestionar_equipo")
 def registrar_mantenimiento(usuario: str, equipo: Equipo):

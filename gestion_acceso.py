@@ -227,6 +227,7 @@ def inicializar_admin_si_no_existe():
 @requiere_permiso("gestionar_usuarios")
 def menu_usuarios(usuario_actual: str):
     while True:
+        # La llamada a mostrar_encabezado se encarga de limpiar la pantalla.
         ui.mostrar_encabezado("Gestión de Usuarios")
         usuarios = db_manager.get_all_users()
         

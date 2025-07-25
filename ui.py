@@ -75,12 +75,20 @@ def mostrar_encabezado(titulo: str, ancho: int = 80, color: str = Fore.WHITE):
         print("\n" + color + Style.BRIGHT + f" {titulo.upper()} ".center(ancho, ' ') + Style.RESET_ALL)
         print(color + "─" * ancho + Style.RESET_ALL)
 
+# ui.py
+
+# ui.py
+
 def mostrar_menu(opciones: List[str], titulo: str):
-    """Muestra un menú de opciones con formato."""
-    mostrar_encabezado(titulo, color=Fore.WHITE)
+    if titulo:
+        print("\n" + Fore.WHITE + Style.BRIGHT + f" {titulo.upper()} ".center(80, ' ') + Style.RESET_ALL)
+        print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
     for i, opcion in enumerate(opciones, 1):
         print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
-    print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
+    
+    if opciones:
+        print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
 
 def pausar_pantalla():
     """Pausa la ejecución hasta que el usuario presione Enter."""
