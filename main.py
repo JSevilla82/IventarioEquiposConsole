@@ -18,8 +18,8 @@ from gestion_acceso import (
     cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS,
     menu_ver_log_sistema
 )
-# MODIFICACIÓN: Importar el nuevo módulo de dashboard
-from dashboard import mostrar_dashboard
+
+from estadisticas import mostrar_estadisticas
 
 load_dotenv()
 
@@ -142,7 +142,6 @@ def menu_principal():
         print(Fore.BLUE + "═" * 80 + Style.RESET_ALL)
         
         # --- MENÚ PRINCIPAL ACTUALIZADO ---
-        # MODIFICACIÓN: Añadida la opción del Dashboard
         opciones_principales = [
             "Estadísticas de Inventario",
             "Gestión de Inventario",
@@ -156,7 +155,7 @@ def menu_principal():
         
         # MODIFICACIÓN: Lógica para manejar la nueva opción
         if opcion == '1':
-            mostrar_dashboard(usuario_logueado)
+            mostrar_estadisticas(usuario_logueado)
         elif opcion == '2':
             menu_gestion_inventario(usuario_logueado)
         elif opcion == '3':
