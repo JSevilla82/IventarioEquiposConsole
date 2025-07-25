@@ -41,14 +41,17 @@ def menu_gestion_inventario(usuario: str):
         if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: 
             opciones_disponibles.append("Gestionar Equipos")
         
+        # MODIFICADO: Añadido conteo de renovaciones pendientes
         if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]:
-            mantenimientos_pendientes = len([e for e in db_manager.get_all_equipos() if e.get('estado') == "En mantenimiento"])
-            devoluciones_pendientes = len([e for e in db_manager.get_all_equipos() if e.get('estado') == "Pendiente Devolución a Proveedor"])
-            total_pendientes = mantenimientos_pendientes + devoluciones_pendientes
+            equipos = db_manager.get_all_equipos()
+            mantenimientos_pendientes = len([e for e in equipos if e.get('estado') == "En mantenimiento"])
+            devoluciones_pendientes = len([e for e in equipos if e.get('estado') == "Pendiente Devolución a Proveedor"])
+            renovaciones_pendientes = len([e for e in equipos if e.get('estado') == "Renovación"])
+            total_pendientes = mantenimientos_pendientes + devoluciones_pendientes + renovaciones_pendientes
             
             color = Fore.GREEN
             if total_pendientes > 0:
-                color = Fore.YELLOW if total_pendientes == 1 else Fore.RED
+                color = Fore.YELLOW if total_pendientes <= 2 else Fore.RED
             
             texto_menu_pendientes = f"Gestionar Mantenimientos y Devoluciones {color}({total_pendientes} Pendientes){Style.RESET_ALL}"
             opciones_disponibles.append(texto_menu_pendientes)
@@ -117,7 +120,7 @@ def menu_accesos_rapidos():
     mostrar_encabezado("Accesos Rápidos Disponibles", color=Fore.CYAN)
     print(f"  {Fore.YELLOW}rq{Style.RESET_ALL}  - Registrar un nuevo equipo")
     print(f"  {Fore.YELLOW}gq{Style.RESET_ALL}  - Gestionar un equipo existente")
-    print(f"  {Fore.YELLOW}gmd{Style.RESET_ALL} - Gestionar Mantenimientos y Devoluciones")
+    print(f"  {Fore.YELLOW}gmd{Style.RESET_ALL} - Gestionar Mantenimientos, Devoluciones y Renovaciones")
     print(f"  {Fore.YELLOW}vm{Style.RESET_ALL} - Ver los últimos 20 movimientos")
     print(f"\n  --- Reportes en Excel ---")
     print(f"  {Fore.YELLOW}ria{Style.RESET_ALL} - Reporte de Inventario Actual")
@@ -171,7 +174,6 @@ def menu_principal():
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido: " + Style.RESET_ALL).strip().lower()
         
-        # --- Lógica de Accesos Rápidos ---
         shortcuts = {
             'rq': lambda: registrar_equipo(usuario_logueado),
             'gq': lambda: gestionar_equipos(usuario_logueado),
@@ -184,7 +186,6 @@ def menu_principal():
         
         if opcion in shortcuts:
             shortcuts[opcion]()
-        # --- Fin de Lógica de Accesos Rápidos ---
 
         elif opcion == '1':
             mostrar_estadisticas(usuario_logueado)

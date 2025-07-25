@@ -27,7 +27,7 @@ def mostrar_estadisticas(usuario: str):
     # --- 1. Obtención de Datos ---
     equipos = db_manager.get_all_equipos()
     
-    # Resumen por estado
+    # MODIFICADO: Añadido el estado "Renovación"
     estados = {
         "Disponible": 0,
         "Asignado": 0,
@@ -35,12 +35,14 @@ def mostrar_estadisticas(usuario: str):
         "En mantenimiento": 0,
         "Pendiente Devolución a Proveedor": 0,
         "Devuelto a Proveedor": 0,
+        "Renovación": 0,
     }
     for equipo in equipos:
         if equipo['estado'] in estados:
             estados[equipo['estado']] += 1
     
-    total_equipos_activos = sum(v for k, v in estados.items() if k != "Devuelto a Proveedor")
+    # Los equipos en renovación no se cuentan como activos.
+    total_equipos_activos = sum(v for k, v in estados.items() if k not in ["Devuelto a Proveedor", "Renovación"])
 
     # Últimos 10 movimientos
     movimientos_recientes = db_manager.get_all_log_inventario()[:10]
@@ -50,6 +52,7 @@ def mostrar_estadisticas(usuario: str):
     # Sección de Resumen General
     print(Fore.CYAN + "--- Resumen General del Inventario ---" + Style.RESET_ALL)
     print(f"  Total de Equipos Activos: {Fore.YELLOW}{total_equipos_activos}{Style.RESET_ALL}")
+    print(f"  Equipos en Renovación: {Fore.YELLOW}{estados['Renovación']}{Style.RESET_ALL}")
     print(f"  Equipos Devueltos a Proveedor: {Fore.YELLOW}{estados['Devuelto a Proveedor']}{Style.RESET_ALL}")
     print("-" * 40)
 
@@ -58,14 +61,20 @@ def mostrar_estadisticas(usuario: str):
     print(f"  {Fore.WHITE}Disponibles:{' ' * (28 - len('Disponibles:'))}{Fore.YELLOW}{estados['Disponible']}{Style.RESET_ALL}")
     print(f"  {Fore.WHITE}Asignados:{' ' * (28 - len('Asignados:'))}{Fore.YELLOW}{estados['Asignado']}{Style.RESET_ALL}")
     print(f"  {Fore.WHITE}En Préstamo:{' ' * (28 - len('En Préstamo:'))}{Fore.YELLOW}{estados['En préstamo']}{Style.RESET_ALL}")
-    
-    # Aplicar color dinámico solo a los valores que lo necesitan
+    print("-" * 40)
+
+    # NUEVO: Sección de Procesos Pendientes
+    print(Fore.CYAN + "\n--- Procesos Pendientes de Aprobación ---" + Style.RESET_ALL)
     color_mantenimiento = obtener_color_por_cantidad(estados['En mantenimiento'])
     print(f"  {Fore.WHITE}En Mantenimiento:{' ' * (28 - len('En Mantenimiento:'))}{color_mantenimiento}{estados['En mantenimiento']}{Style.RESET_ALL}")
     
     color_devolucion = obtener_color_por_cantidad(estados['Pendiente Devolución a Proveedor'])
     print(f"  {Fore.WHITE}Pendientes de Devolución:{' ' * (28 - len('Pendientes de Devolución:'))}{color_devolucion}{estados['Pendiente Devolución a Proveedor']}{Style.RESET_ALL}")
+
+    color_renovacion = obtener_color_por_cantidad(estados['Renovación'])
+    print(f"  {Fore.WHITE}En Renovación:{' ' * (28 - len('En Renovación:'))}{color_renovacion}{estados['Renovación']}{Style.RESET_ALL}")
     print("-" * 40)
+
 
     # Sección de Movimientos Recientes
     print(Fore.CYAN + f"\n--- Últimos {len(movimientos_recientes)} Movimientos del Inventario ---" + Style.RESET_ALL)

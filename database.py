@@ -6,6 +6,7 @@ from colorama import Fore, Style
 
 # --- MODELOS DE DATOS ---
 class Equipo:
+    # MODIFICADO: Añadidos campos para renovación
     def __init__(self, placa: str, tipo: str, marca: str, modelo: str, serial: str,
                  estado: str = "Disponible", asignado_a: Optional[str] = None,
                  email_asignado: Optional[str] = None, observaciones: Optional[str] = None,
@@ -13,7 +14,9 @@ class Equipo:
                  fecha_devolucion_prestamo: Optional[str] = None,
                  fecha_devolucion_proveedor: Optional[str] = None,
                  motivo_devolucion: Optional[str] = None,
-                 estado_anterior: Optional[str] = None):
+                 estado_anterior: Optional[str] = None,
+                 renovacion_placa_asociada: Optional[str] = None,
+                 fecha_entrega_renovacion: Optional[str] = None):
         self.placa = placa
         self.tipo = tipo
         self.marca = marca
@@ -28,6 +31,8 @@ class Equipo:
         self.fecha_devolucion_proveedor = fecha_devolucion_proveedor
         self.motivo_devolucion = motivo_devolucion
         self.estado_anterior = estado_anterior
+        self.renovacion_placa_asociada = renovacion_placa_asociada
+        self.fecha_entrega_renovacion = fecha_entrega_renovacion
 
     def to_dict(self) -> Dict:
         return self.__dict__
@@ -83,6 +88,7 @@ class DatabaseManager:
 
     def create_tables(self):
         cursor = self.conn.cursor()
+        # MODIFICADO: Añadidos campos para renovación en la tabla equipos
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS equipos (
                 placa TEXT PRIMARY KEY, tipo TEXT NOT NULL, marca TEXT NOT NULL,
@@ -90,7 +96,8 @@ class DatabaseManager:
                 asignado_a TEXT, email_asignado TEXT, observaciones TEXT,
                 fecha_registro TEXT, fecha_devolucion_prestamo TEXT, 
                 fecha_devolucion_proveedor TEXT, motivo_devolucion TEXT,
-                estado_anterior TEXT 
+                estado_anterior TEXT, renovacion_placa_asociada TEXT,
+                fecha_entrega_renovacion TEXT
             )
         ''')
         cursor.execute('''
@@ -131,7 +138,9 @@ class DatabaseManager:
                 ('fecha_devolucion_prestamo', 'TEXT'),
                 ('fecha_devolucion_proveedor', 'TEXT'),
                 ('motivo_devolucion', 'TEXT'),
-                ('estado_anterior', 'TEXT')
+                ('estado_anterior', 'TEXT'),
+                ('renovacion_placa_asociada', 'TEXT'),
+                ('fecha_entrega_renovacion', 'TEXT')
             ],
             'usuarios': [
                 ('nombre_completo', 'TEXT'),
@@ -162,9 +171,9 @@ class DatabaseManager:
     # --- Métodos para Equipos ---
     def insert_equipo(self, equipo: Equipo):
         self.execute_query('''
-            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion, estado_anterior)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior))
+            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion, estado_anterior, renovacion_placa_asociada, fecha_entrega_renovacion)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion))
         self.commit()
 
     def get_all_equipos(self) -> List[Dict]:
@@ -216,10 +225,12 @@ class DatabaseManager:
         self.execute_query('''
             UPDATE equipos SET tipo = ?, marca = ?, modelo = ?, serial = ?, estado = ?, asignado_a = ?,
             email_asignado = ?, observaciones = ?, fecha_devolucion_prestamo = ?, fecha_devolucion_proveedor = ?,
-            motivo_devolucion = ?, estado_anterior = ? WHERE placa = ?
+            motivo_devolucion = ?, estado_anterior = ?, renovacion_placa_asociada = ?, fecha_entrega_renovacion = ?
+            WHERE placa = ?
         ''', (equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a,
               equipo.email_asignado, equipo.observaciones, equipo.fecha_devolucion_prestamo,
-              equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, equipo.placa))
+              equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, 
+              equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.placa))
         self.commit()
 
     def delete_equipo(self, placa: str):
