@@ -12,13 +12,16 @@ from gestion_inventario import (
     registrar_equipo, gestionar_equipos,
     menu_gestionar_pendientes
 )
-from gestion_reportes import menu_ver_inventario
+from gestion_reportes import (
+    menu_ver_inventario, menu_ver_ultimos_movimientos,
+    generar_excel_inventario, generar_excel_devueltos_proveedor,
+    generar_excel_historico
+)
 from gestion_acceso import (
     login, menu_usuarios, menu_configuracion_sistema,
     cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS,
     menu_ver_log_sistema
 )
-
 from estadisticas import mostrar_estadisticas
 
 load_dotenv()
@@ -108,6 +111,21 @@ def menu_gestion_acceso_sistema(usuario: str):
         except (ValueError, IndexError):
             print(Fore.RED + "Entrada no válida.")
 
+def menu_accesos_rapidos():
+    """Muestra una pantalla con la lista de accesos rápidos disponibles."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+    mostrar_encabezado("Accesos Rápidos Disponibles", color=Fore.CYAN)
+    print(f"  {Fore.YELLOW}rq{Style.RESET_ALL}  - Registrar un nuevo equipo")
+    print(f"  {Fore.YELLOW}gq{Style.RESET_ALL}  - Gestionar un equipo existente")
+    print(f"  {Fore.YELLOW}gmd{Style.RESET_ALL} - Gestionar Mantenimientos y Devoluciones")
+    print(f"  {Fore.YELLOW}vm{Style.RESET_ALL} - Ver los últimos 20 movimientos")
+    print(f"\n  --- Reportes en Excel ---")
+    print(f"  {Fore.YELLOW}ria{Style.RESET_ALL} - Reporte de Inventario Actual")
+    print(f"  {Fore.YELLOW}red{Style.RESET_ALL} - Reporte de Equipos Devueltos")
+    print(f"  {Fore.YELLOW}rhc{Style.RESET_ALL} - Reporte Histórico Completo (Log)")
+    print("\n" + Fore.CYAN + "Escribe estos comandos en el menú principal para ir directamente a la función." + Style.RESET_ALL)
+    pausar_pantalla()
+
 def menu_principal():
     inicializar_admin_si_no_existe()
     
@@ -141,20 +159,34 @@ def menu_principal():
             print(Back.YELLOW + Fore.BLACK + "--- MODO DESARROLLO ---".center(80, ' ') + Style.RESET_ALL)
         print(Fore.BLUE + "═" * 80 + Style.RESET_ALL)
         
-        # --- MENÚ PRINCIPAL ACTUALIZADO ---
         opciones_principales = [
             "Estadísticas de Inventario",
             "Gestión de Inventario",
             "Ver Inventario y Reportes",
             "Gestión de Acceso y Sistema",
+            "Aprender Accesos Rápidos",
             "Salir"
         ]
         mostrar_menu(opciones_principales, titulo="Módulos del Sistema")
         
-        opcion = input(Fore.YELLOW + "Seleccione un módulo: " + Style.RESET_ALL).strip()
+        opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido: " + Style.RESET_ALL).strip().lower()
         
-        # MODIFICACIÓN: Lógica para manejar la nueva opción
-        if opcion == '1':
+        # --- Lógica de Accesos Rápidos ---
+        shortcuts = {
+            'rq': lambda: registrar_equipo(usuario_logueado),
+            'gq': lambda: gestionar_equipos(usuario_logueado),
+            'gmd': lambda: menu_gestionar_pendientes(usuario_logueado),
+            'vm': lambda: menu_ver_ultimos_movimientos(usuario_logueado),
+            'ria': lambda: generar_excel_inventario(usuario_logueado),
+            'red': lambda: generar_excel_devueltos_proveedor(usuario_logueado),
+            'rhc': lambda: generar_excel_historico(usuario_logueado),
+        }
+        
+        if opcion in shortcuts:
+            shortcuts[opcion]()
+        # --- Fin de Lógica de Accesos Rápidos ---
+
+        elif opcion == '1':
             mostrar_estadisticas(usuario_logueado)
         elif opcion == '2':
             menu_gestion_inventario(usuario_logueado)
@@ -163,10 +195,13 @@ def menu_principal():
         elif opcion == '4':
             menu_gestion_acceso_sistema(usuario_logueado)
         elif opcion == '5':
+            menu_accesos_rapidos()
+        elif opcion == '6':
             break
         else:
-            print(Fore.RED + "\n❌ Opción no válida.")
-            pausar_pantalla()
+            if opcion not in shortcuts:
+                print(Fore.RED + "\n❌ Opción no válida.")
+                pausar_pantalla()
     
     print(Fore.GREEN + "\n¡Gracias por usar el Sistema de Gestión de Inventario!")
 
