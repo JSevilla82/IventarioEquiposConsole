@@ -2,6 +2,8 @@
 import os
 import bcrypt
 import getpass
+import re
+import time
 from typing import Callable, Dict
 import sqlite3
 import webbrowser
@@ -63,29 +65,75 @@ def verificar_contrasena(contrasena: str, hash_almacenado: str) -> bool:
     return bcrypt.checkpw(contrasena.encode('utf-8'), hash_almacenado.encode('utf-8'))
 
 def validar_contrasena(contrasena: str) -> bool:
-    return len(contrasena) >= 8
+    if len(contrasena) < 8:
+        return False
+    if not re.search(r'[A-Za-z]', contrasena):
+        return False
+    if not re.search(r'[0-9]', contrasena):
+        return False
+    return True
 
 def login():
-    ui.mostrar_encabezado("Inicio de Sesión", color=Fore.GREEN)
-    for _ in range(3):
-        nombre_usuario = input(Fore.YELLOW + "Usuario: " + Style.RESET_ALL).strip()
-        contrasena = getpass.getpass(Fore.YELLOW + "Contraseña: " + Style.RESET_ALL)
+    error_message = ""
+    nombre_usuario = ""
+    intentos = 0
+    
+    while intentos < 3:
+        ui.mostrar_encabezado("Inicio de Sesión")
+        print("Bienvenido al Control de Inventario de Equipos (CIE).")
+        print("Por favor, ingrese su usuario y contraseña para continuar.")
+        print(Fore.WHITE + "─" * 80)
+
+        if error_message:
+            print(Fore.RED + f"\n{error_message}\n")
+        
+        nombre_usuario = ui.solicitar_input(Fore.YELLOW + "👤 Ingrese su usuario: ", default=nombre_usuario)
+        contrasena = ui.solicitar_contrasena_con_asteriscos(Fore.YELLOW + "🔑 Ingrese su contraseña: ")
+
+        if not nombre_usuario or not contrasena:
+            error_message = "❌ El usuario y la contraseña no pueden estar vacíos."
+            continue
+        
+        # --- Secuencia de carga ---
+        loading_messages = [
+            "Iniciando sesión...",
+            "Configurando la aplicación..."
+        ]
+        total_delay = 2  # segundos
+        delay_per_message = total_delay / len(loading_messages)
+
+        print() # Espacio antes de los mensajes de carga
+        for msg in loading_messages:
+            print(Fore.CYAN + f"\r{msg.ljust(40)}", end="", flush=True)
+            time.sleep(delay_per_message)
+        
+        print("\r" + " " * 40 + "\r", end="", flush=True) # Limpia la línea
+        # --- Fin de la secuencia de carga ---
+
         user_data = db_manager.get_user_by_username(nombre_usuario)
+        
         if user_data and verificar_contrasena(contrasena, user_data['contrasena_hash']):
             if not user_data['is_active']:
-                print(Fore.RED + "❌ Su cuenta de usuario está bloqueada. Contacte a un administrador.")
+                error_message = "❌ Su cuenta de usuario está bloqueada. Contacte a un administrador."
+                intentos += 1
                 continue
             
-            print(Fore.GREEN + f"\n✅ ¡Bienvenido, {user_data.get('nombre_completo', nombre_usuario)}!")
+            # --- Inicio de sesión exitoso ---
             if user_data.get('cambio_clave_requerido'):
-                print(Fore.YELLOW + "⚠️ Su contraseña debe ser cambiada.")
+                ui.mostrar_encabezado("Cambio de Contraseña Requerido")
+                print(Fore.YELLOW + "⚠️ Su contraseña ha expirado y debe ser cambiada.")
+                ui.pausar_pantalla()
                 cambiar_contrasena_usuario(nombre_usuario, forzar_cambio=True)
-            ui.pausar_pantalla()
+            
+            # Se retorna directamente para ir al menú principal
             return nombre_usuario
         else:
-            print(Fore.RED + "❌ Credenciales incorrectas.")
+            error_message = "❌ Credenciales incorrectas."
+            intentos += 1
+
     print(Fore.RED + "\n❌ Demasiados intentos fallidos.")
     return None
+
 
 @requiere_permiso("gestionar_usuarios")
 def registrar_usuario(usuario_actual: str):
@@ -118,30 +166,54 @@ def registrar_usuario(usuario_actual: str):
         ui.pausar_pantalla()
 
 def cambiar_contrasena_usuario(nombre_usuario: str, forzar_cambio: bool = False):
-    ui.mostrar_encabezado(f"Cambiar Contraseña para {nombre_usuario}")
-    print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar.")
-    user_data = db_manager.get_user_by_username(nombre_usuario)
-    if not user_data: print(Fore.RED + "Usuario no encontrado."); return
-    try:
-        if not forzar_cambio:
-            old_password = getpass.getpass(Fore.YELLOW + "Contraseña actual: " + Style.RESET_ALL)
-            if not verificar_contrasena(old_password, user_data['contrasena_hash']):
-                print(Fore.RED + "Contraseña actual incorrecta."); return
+    error_message = ""
+    while True:
+        ui.mostrar_encabezado(f"Cambiar Contraseña para {nombre_usuario}")
+        print(Fore.CYAN + "💡 La contraseña debe tener al menos 8 caracteres, incluyendo letras y números.")
+        print(Fore.WHITE + "─" * 80)
+
+        if error_message:
+            print(Fore.RED + f"\n{error_message}\n")
+            error_message = ""
         
-        new_password = getpass.getpass(Fore.YELLOW + "Nueva contraseña (mín. 8 caracteres): " + Style.RESET_ALL)
-        if not validar_contrasena(new_password):
-            print(Fore.RED + "La nueva contraseña es muy corta."); return
-        
-        user_obj = Usuario(**user_data)
-        user_obj.contrasena_hash = hash_contrasena(new_password)
-        user_obj.cambio_clave_requerido = False
-        db_manager.update_user(user_obj)
-        registrar_movimiento_sistema("Cambio Contraseña", f"Contraseña cambiada para '{nombre_usuario}'", nombre_usuario)
-        print(Fore.GREEN + "\n✅ Contraseña cambiada exitosamente.")
-    except KeyboardInterrupt:
-        print(Fore.CYAN + "\n🚫 Operación cancelada.")
-    finally:
-        ui.pausar_pantalla()
+        user_data = db_manager.get_user_by_username(nombre_usuario)
+        if not user_data:
+            print(Fore.RED + "Usuario no encontrado.")
+            break
+
+        try:
+            if not forzar_cambio:
+                old_password = ui.solicitar_contrasena_con_asteriscos(Fore.YELLOW + "🔑 Ingrese su contraseña actual: ")
+                if not old_password:
+                    error_message = "❌ La contraseña actual no puede estar vacía."
+                    continue
+                if not verificar_contrasena(old_password, user_data['contrasena_hash']):
+                    error_message = "❌ Contraseña actual incorrecta."
+                    continue
+            
+            new_password = ui.solicitar_contrasena_con_asteriscos(Fore.YELLOW + "🔑 Ingrese su nueva contraseña: ")
+            if not validar_contrasena(new_password):
+                error_message = "❌ La nueva contraseña es muy corta o no contiene letras y números."
+                continue
+                
+            confirm_password = ui.solicitar_contrasena_con_asteriscos(Fore.YELLOW + "🔑 Confirme la nueva contraseña: ")
+            if new_password != confirm_password:
+                error_message = "❌ Las contraseñas no coinciden."
+                continue
+
+            user_obj = Usuario(**user_data)
+            user_obj.contrasena_hash = hash_contrasena(new_password)
+            user_obj.cambio_clave_requerido = False
+            db_manager.update_user(user_obj)
+            registrar_movimiento_sistema("Cambio Contraseña", f"Contraseña cambiada para '{nombre_usuario}'", nombre_usuario)
+            print(Fore.GREEN + "\n✅ Contraseña cambiada exitosamente.")
+            ui.pausar_pantalla()
+            break
+
+        except KeyboardInterrupt:
+            print(Fore.CYAN + "\n🚫 Operación cancelada.")
+            ui.pausar_pantalla()
+            break
 
 def inicializar_admin_si_no_existe():
     if not db_manager.get_user_by_username("admin"):
@@ -155,7 +227,6 @@ def inicializar_admin_si_no_existe():
 @requiere_permiso("gestionar_usuarios")
 def menu_usuarios(usuario_actual: str):
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
         ui.mostrar_encabezado("Gestión de Usuarios")
         usuarios = db_manager.get_all_users()
         
@@ -197,7 +268,6 @@ def gestionar_usuario_especifico(admin_usuario: str, target_user_data: Dict):
     target_user_obj = Usuario(**db_manager.get_user_by_username(target_user_data['nombre_usuario']))
     
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
         estado = Fore.GREEN + "Activo" if target_user_obj.is_active else Fore.RED + "Bloqueado"
         ui.mostrar_encabezado(f"Gestionando a {target_user_obj.nombre_usuario}", color=Fore.GREEN)
         
@@ -315,7 +385,6 @@ def generar_excel_log_sistema(usuario: str):
 @requiere_permiso("configurar_sistema")
 def menu_configuracion_sistema(usuario: str):
     while True:
-        # MODIFICACIÓN: Añadida nueva opción al menú
         opciones_menu = [
             "Gestionar Tipos de Equipo", 
             "Gestionar Marcas", 
@@ -331,7 +400,6 @@ def menu_configuracion_sistema(usuario: str):
         elif opcion == '2':
             gestionar_parametros(usuario, 'marca_equipo', 'Marca')
         elif opcion == '3':
-            # MODIFICACIÓN: Llamada para gestionar dominios
             gestionar_parametros(usuario, 'dominio_correo', 'Dominio de Correo Permitido')
         elif opcion == '4':
             break
@@ -340,7 +408,6 @@ def menu_configuracion_sistema(usuario: str):
 
 def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str):
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
         ui.mostrar_encabezado(f"Gestionar {nombre_amigable}s")
         
         items = db_manager.get_parametros_por_tipo(tipo_parametro)
@@ -374,7 +441,6 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
                         print(Fore.RED + "El valor no puede estar vacío.")
                         continue
                     
-                    # Validación específica para dominios
                     if tipo_parametro == 'dominio_correo' and ('@' in nuevo_valor or '.' not in nuevo_valor):
                         print(Fore.RED + "Formato de dominio inválido. Ingrese solo el dominio (ej: gmail.com).")
                         continue

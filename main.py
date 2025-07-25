@@ -31,10 +31,8 @@ def menu_gestion_inventario(usuario: str):
     rol_actual = user_data['rol']
     
     while True:
-        # Se elimina os.system('cls'...) de aquí
         opciones_disponibles = []
         
-        # Construcción dinámica del menú
         if "registrar_equipo" in ROLES_PERMISOS[rol_actual]: 
             opciones_disponibles.append("Registrar nuevo equipo")
         if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: 
@@ -88,7 +86,6 @@ def menu_gestion_acceso_sistema(usuario: str):
     rol_actual = user_data['rol']
     
     while True:
-        # Se elimina os.system('cls'...) de aquí
         opciones_disponibles = []
         if "gestionar_usuarios" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestión de usuarios")
         if "configurar_sistema" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Configuración del Sistema")
@@ -114,7 +111,6 @@ def menu_gestion_acceso_sistema(usuario: str):
 
 def menu_accesos_rapidos():
     """Muestra una pantalla con la lista de accesos rápidos disponibles."""
-    # Se elimina os.system('cls'...) de aquí
     mostrar_encabezado("Accesos Rápidos Disponibles", color=Fore.CYAN)
     print(f"  {Fore.YELLOW}rq{Style.RESET_ALL}  - Registrar un nuevo equipo")
     print(f"  {Fore.YELLOW}gq{Style.RESET_ALL}  - Gestionar un equipo existente")
@@ -134,11 +130,15 @@ def menu_principal():
 
     usuario_logueado = None
 
+    import ui # Importar ui al principio
+
+    # Resetear variables de usuario al inicio
+    ui.USUARIO_ACTUAL = None
+    ui.ROL_ACTUAL = None
+    ui.NOMBRE_COMPLETO_USUARIO = None
+
     if ENVIRONMENT == 'development':
         usuario_logueado = "admin"
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print(Back.YELLOW + Fore.BLACK + "--- MODO DESARROLLO ACTIVO ---" + Style.RESET_ALL)
-        print(Fore.YELLOW + "Login omitido. Sesión iniciada como 'admin'.\n" + Style.RESET_ALL)
     else:
         while usuario_logueado is None:
             usuario_logueado = login()
@@ -146,15 +146,13 @@ def menu_principal():
                 if input(Fore.RED + "¿Salir del programa? (S/N): " + Style.RESET_ALL).strip().upper() == 'S':
                     return
 
-    import ui
-    ui.USUARIO_ACTUAL = usuario_logueado
-
+    # Establecer las variables globales de UI después del login
     user_data = db_manager.get_user_by_username(usuario_logueado)
-    rol_actual = user_data['rol']
+    ui.USUARIO_ACTUAL = usuario_logueado
+    ui.ROL_ACTUAL = user_data['rol']
+    ui.NOMBRE_COMPLETO_USUARIO = user_data.get('nombre_completo', usuario_logueado)
 
     while True:
-        # La limpieza y el encabezado ahora son manejados por mostrar_menu
-        
         opciones_principales = [
             "Estadísticas de Inventario",
             "Gestión de Inventario",
@@ -164,12 +162,8 @@ def menu_principal():
             "Salir"
         ]
         
-        # Construimos un título dinámico para el menú principal
-        titulo_principal = f"MENÚ PRINCIPAL - Usuario: {usuario_logueado} (Rol: {rol_actual})"
-        if ENVIRONMENT == 'development':
-            titulo_principal += " --- MODO DESARROLLO ---"
-        
-        mostrar_menu(opciones_principales, titulo=titulo_principal)
+        # El título del menú principal ahora es estático
+        mostrar_menu(opciones_principales, titulo="Menú Principal")
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido: " + Style.RESET_ALL).strip().lower()
         
