@@ -56,7 +56,8 @@ def mostrar_estadisticas(usuario: str):
     # Sección de Estado Actual
     print(Fore.CYAN + "\n--- Estado Actual de Equipos Activos ---" + Style.RESET_ALL)
     print(f"  {Fore.WHITE}Disponibles:{' ' * (28 - len('Disponibles:'))}{Fore.YELLOW}{estados['Disponible']}{Style.RESET_ALL}")
-    print(f"  {Fore.WHITE}Asignados / En Préstamo:{' ' * (28 - len('Asignados / En Préstamo:'))}{Fore.YELLOW}{estados['Asignado'] + estados['En préstamo']}{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}Asignados:{' ' * (28 - len('Asignados:'))}{Fore.YELLOW}{estados['Asignado']}{Style.RESET_ALL}")
+    print(f"  {Fore.WHITE}En Préstamo:{' ' * (28 - len('En Préstamo:'))}{Fore.YELLOW}{estados['En préstamo']}{Style.RESET_ALL}")
     
     # Aplicar color dinámico solo a los valores que lo necesitan
     color_mantenimiento = obtener_color_por_cantidad(estados['En mantenimiento'])

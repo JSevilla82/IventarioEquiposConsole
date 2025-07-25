@@ -37,7 +37,6 @@ def validar_serial(serial: str) -> bool:
     if not serial: return False
     return serial.isalnum()
 
-# MODIFICACIÓN: Nueva función para validar y formatear nombres
 def formatear_y_validar_nombre(nombre: str) -> Optional[str]:
     """
     Valida que el nombre tenga al menos dos palabras y lo formatea a tipo título.
@@ -204,12 +203,29 @@ def gestionar_equipos(usuario: str):
     try:
         print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para regresar." + Style.RESET_ALL)
         
+        # 1. Equipos nuevos
         equipos_nuevos = db_manager.get_new_equipos()
         if equipos_nuevos:
             print(Fore.GREEN + "\n--- Equipos Nuevos (sin gestión) ---" + Style.RESET_ALL)
             for equipo in equipos_nuevos:
                 print(f"  - Placa: {equipo['placa']}, Tipo: {equipo['tipo']}, Marca: {equipo['marca']} {Fore.CYAN}(New){Style.RESET_ALL}")
-            print("--------------------------------------" + Style.RESET_ALL)
+        
+        # 2. Equipos disponibles (no nuevos)
+        equipos_disponibles = db_manager.get_available_not_new_equipos()
+        if equipos_disponibles:
+            print(Fore.CYAN + "\n--- Equipos Disponibles (con historial) ---" + Style.RESET_ALL)
+            for equipo in equipos_disponibles:
+                print(f"  - Placa: {equipo['placa']}, Tipo: {equipo['tipo']}, Marca: {equipo['marca']}")
+
+        # 3. Último equipo gestionado por el usuario
+        ultimo_gestionado_log = db_manager.get_last_movimientos_by_user(usuario, limit=1)
+        if ultimo_gestionado_log:
+            ultimo_equipo = ultimo_gestionado_log[0]
+            print(Fore.MAGENTA + "\n--- Último Equipo Gestionado por ti ---" + Style.RESET_ALL)
+            fecha_dt = datetime.strptime(ultimo_equipo['fecha'], '%Y-%m-%d %H:%M:%S')
+            print(f"  - Placa: {ultimo_equipo['equipo_placa']}, Acción: {ultimo_equipo['accion']}, Fecha: {fecha_dt.strftime('%d/%m/%Y')}")
+
+        print("-" * 50)
 
         while True:
             placa = input(Fore.YELLOW + "\nIngrese la placa del equipo a gestionar: " + Style.RESET_ALL).strip().upper()
@@ -233,15 +249,25 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
         os.system('cls' if os.name == 'nt' else 'clear')
         mostrar_encabezado(f"Gestionando Equipo - PLACA: {equipo.placa}", color=Fore.GREEN)
         
+        # --- SECCIÓN MODIFICADA: Se quitó la placa ---
         print(Fore.CYAN + "--- Información del Equipo ---")
-        print(f"  {'Placa:'.ljust(25)} {equipo.placa}")
         print(f"  {'Tipo:'.ljust(25)} {equipo.tipo}")
         print(f"  {'Marca:'.ljust(25)} {equipo.marca}")
         print(f"  {'Modelo:'.ljust(25)} {equipo.modelo}")
         print(f"  {'Serial:'.ljust(25)} {equipo.serial}")
         
+        # --- SECCIÓN MODIFICADA: Se añadió la fecha al estado ---
         print(Fore.CYAN + "\n--- Estado y Asignación ---")
-        print(f"  {'Estado actual:'.ljust(25)} {equipo.estado}")
+        
+        # Obtener fecha del último estado
+        ultimo_movimiento = db_manager.get_last_movimiento_by_placa(equipo.placa)
+        fecha_estado = ""
+        if ultimo_movimiento:
+            fecha_obj = datetime.strptime(ultimo_movimiento['fecha'], "%Y-%m-%d %H:%M:%S")
+            fecha_estado = f" / Desde el {fecha_obj.strftime('%d/%m/%Y')}"
+
+        print(f"  {'Estado actual:'.ljust(25)} {equipo.estado}{fecha_estado}")
+
         if equipo.asignado_a:
             print(f"  {'Asignado a:'.ljust(25)} {equipo.asignado_a} ({equipo.email_asignado})")
         if equipo.fecha_devolucion_prestamo:
@@ -283,13 +309,13 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
         opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
 
         opciones_validas = {
-            "1": "asignar", "2": "devolver", "3": "mantenimiento",
+            "1": "asignar_prestar", "2": "devolver", "3": "mantenimiento",
             "4": "proveedor", "5": "detalles", "6": "historial",
             "7": "editar", "8": "eliminar", "9": "volver"
         }
         accion = opciones_validas.get(opcion)
 
-        if accion == "asignar": asignar_o_prestar_equipo(usuario, equipo)
+        if accion == "asignar_prestar": asignar_o_prestar_equipo(usuario, equipo)
         elif accion == "devolver": devolver_equipo(usuario, equipo)
         elif accion == "mantenimiento": registrar_mantenimiento(usuario, equipo)
         elif accion == "proveedor": registrar_devolucion_a_proveedor(usuario, equipo)
@@ -323,7 +349,15 @@ def mostrar_detalles_equipo(equipo: Equipo):
 
     # --- Sección 2: Estado y Asignación (Contextual) ---
     print(Fore.CYAN + "\n--- Estado y Asignación ---" + Style.RESET_ALL)
-    print(f"  {'Estado Actual:'.ljust(28)} {equipo.estado}")
+    
+    # Obtener fecha del último estado
+    ultimo_movimiento = db_manager.get_last_movimiento_by_placa(equipo.placa)
+    fecha_estado = ""
+    if ultimo_movimiento:
+        fecha_obj = datetime.strptime(ultimo_movimiento['fecha'], "%Y-%m-%d %H:%M:%S")
+        fecha_estado = f" / Desde el {fecha_obj.strftime('%d/%m/%Y')}"
+
+    print(f"  {'Estado Actual:'.ljust(28)} {equipo.estado}{fecha_estado}")
 
     if equipo.asignado_a:
         print(f"  {'Asignado a:'.ljust(28)} {equipo.asignado_a} ({equipo.email_asignado or 'Sin email'})")
@@ -331,6 +365,8 @@ def mostrar_detalles_equipo(equipo: Equipo):
     if equipo.estado == "En préstamo" and equipo.fecha_devolucion_prestamo:
         print(f"  {'Fecha Devolución Préstamo:'.ljust(28)} {equipo.fecha_devolucion_prestamo}")
 
+    # --- (El resto de la función continúa igual) ---
+    
     # --- Sección 3: Información Contextual por Estado ---
     log_mantenimiento = db_manager.get_last_log_by_action(equipo.placa, 'Mantenimiento')
     if equipo.estado == "En mantenimiento" and log_mantenimiento:
@@ -388,7 +424,6 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
         pausar_pantalla()
         return
     
-    # MODIFICACIÓN: Verificar si hay dominios configurados antes de continuar
     dominios_permitidos = db_manager.get_parametros_por_tipo('dominio_correo', solo_activos=True)
     if not dominios_permitidos:
         print(Fore.RED + "❌ No se puede asignar un equipo.")
@@ -400,12 +435,15 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
     try:
         print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
         while True:
-            tipo_asignacion_input = input(Fore.YELLOW + "Escriba 'A' para Asignación o 'P' para Préstamo: " + Style.RESET_ALL).strip().upper()
-            if tipo_asignacion_input in ["A", "P"]:
+            mostrar_menu(["Asignar", "Prestar"], titulo="Seleccione el tipo de operación")
+            tipo_asignacion_input = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+            if tipo_asignacion_input in ["1", "2"]:
                 break
             print(Fore.RED + "Opción inválida. Intente de nuevo.")
         
-        # MODIFICACIÓN: Bucle para validar y formatear el nombre
+        es_prestamo = tipo_asignacion_input == "2"
+        tipo_movimiento = "Préstamo" if es_prestamo else "Asignación"
+
         while True:
             nombre_input = input(Fore.YELLOW + "Nombre de la persona: " + Style.RESET_ALL).strip()
             nombre_asignado = formatear_y_validar_nombre(nombre_input)
@@ -413,7 +451,6 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                 break
             print(Fore.RED + "Nombre inválido. Debe contener al menos nombre y apellido (ej: Juan Pérez).")
 
-        # MODIFICACIÓN: Bucle para validar el dominio del correo electrónico
         while True:
             email_asignado = input(Fore.YELLOW + "Email de la persona: " + Style.RESET_ALL).strip().lower()
             if not validar_email(email_asignado):
@@ -425,7 +462,7 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                 dominios_activos_lista = [d['valor'] for d in dominios_permitidos]
 
                 if dominio_email in dominios_activos_lista:
-                    break  # El dominio es válido y está activo
+                    break
                 else:
                     print(Fore.RED + f"❌ Dominio '{dominio_email}' no está permitido.")
                     print(Fore.CYAN + "Dominios activos permitidos: " + ", ".join(dominios_activos_lista))
@@ -433,23 +470,25 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                 print(Fore.RED + "Formato de email inválido. Intente de nuevo.")
 
         while True:
-            observacion_asignacion = input(Fore.YELLOW + "Observación de la asignación/préstamo: " + Style.RESET_ALL).strip()
+            observacion_asignacion = input(Fore.YELLOW + f"Observación de la {tipo_movimiento.lower()}: " + Style.RESET_ALL).strip()
             if observacion_asignacion:
                 break
             print(Fore.RED + "La observación es obligatoria. Intente de nuevo.")
 
         fecha_devolucion = None
-        if tipo_asignacion_input == "P":
-            tipo_movimiento = "Préstamo"
+        if es_prestamo:
             while True:
-                fecha_str = input(Fore.YELLOW + "Fecha de devolución (DD/MM/AAAA): " + Style.RESET_ALL).strip()
-                if validar_formato_fecha(fecha_str):
-                    fecha_devolucion = fecha_str
-                    break
-                print(Fore.RED + "Formato de fecha inválido. Intente de nuevo.")
-        else:
-            tipo_movimiento = "Asignación"
-
+                fecha_str = input(Fore.YELLOW + "Fecha para la devolución de este equipo (DD/MM/AAAA): " + Style.RESET_ALL).strip()
+                fecha_dt = validar_formato_fecha(fecha_str)
+                if fecha_dt:
+                    if fecha_dt.date() > datetime.now().date():
+                        fecha_devolucion = fecha_str
+                        break
+                    else:
+                        print(Fore.RED + "La fecha de devolución debe ser posterior a la fecha actual.")
+                else:
+                    print(Fore.RED + "Formato de fecha inválido. Intente de nuevo.")
+        
         print("\n" + Fore.CYAN + "--- Resumen de la Operación ---")
         print(f"  {'Acción:'.ljust(20)} {tipo_movimiento}")
         print(f"  {'Equipo (Placa):'.ljust(20)} {equipo.placa}")
@@ -463,7 +502,7 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
         if not confirmar_con_placa(equipo.placa):
             return
 
-        equipo.estado = "En préstamo" if tipo_movimiento == "Préstamo" else "Asignado"
+        equipo.estado = "En préstamo" if es_prestamo else "Asignado"
         detalles_movimiento = f"{tipo_movimiento} a {nombre_asignado}. Obs: {observacion_asignacion}"
         if fecha_devolucion:
             detalles_movimiento += f". Devolución: {fecha_devolucion}"
@@ -473,7 +512,7 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
         equipo.fecha_devolucion_prestamo = fecha_devolucion
 
         db_manager.update_equipo(equipo)
-        registrar_movimiento_inventario(equipo.placa, "Asignación/Préstamo", detalles_movimiento, usuario)
+        registrar_movimiento_inventario(equipo.placa, tipo_movimiento, detalles_movimiento, usuario)
         print(Fore.GREEN + f"\n✅ ¡Operación confirmada! Equipo {equipo.placa} ahora está '{equipo.estado}'.")
 
     except KeyboardInterrupt:
@@ -557,8 +596,7 @@ def editar_equipo(usuario: str, equipo: Equipo):
         
         if not cambios:
             print(Fore.YELLOW + "\nNo se detectaron cambios.")
-            pausar_pantalla()
-            return
+            return # Se elimina la pausa redundante de aquí
             
         while True:
             motivo_edicion = input(Fore.YELLOW + "Motivo de la edición: " + Style.RESET_ALL).strip()
@@ -584,6 +622,7 @@ def editar_equipo(usuario: str, equipo: Equipo):
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación de edición cancelada.")
     finally:
+
         pausar_pantalla()
         
 @requiere_permiso("gestionar_equipo")

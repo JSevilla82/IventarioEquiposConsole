@@ -193,6 +193,20 @@ class DatabaseManager:
         cursor = self.execute_query(query)
         return [dict(row) for row in cursor.fetchall()]
 
+    def get_available_not_new_equipos(self) -> List[Dict]:
+        """Obtiene equipos disponibles que ya han tenido movimientos."""
+        query = """
+            SELECT e.* FROM equipos e
+            JOIN (
+                SELECT equipo_placa, COUNT(id) as count
+                FROM log_inventario
+                GROUP BY equipo_placa
+            ) AS log_counts ON e.placa = log_counts.equipo_placa
+            WHERE log_counts.count > 1 AND e.estado = 'Disponible'
+        """
+        cursor = self.execute_query(query)
+        return [dict(row) for row in cursor.fetchall()]
+
     def get_equipo_by_placa(self, placa: str) -> Optional[Dict]:
         cursor = self.execute_query('SELECT * FROM equipos WHERE placa = ?', (placa,))
         row = cursor.fetchone()
@@ -279,7 +293,6 @@ class DatabaseManager:
         cursor = self.execute_query(query, (usuario, limit))
         return [dict(row) for row in cursor.fetchall()]
 
-    # MODIFICACIÓN: Nueva función para obtener movimientos en un rango de fechas
     def get_movimientos_en_rango_de_fechas(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
         """Obtiene todos los movimientos de inventario dentro de un rango de fechas."""
         query = """
