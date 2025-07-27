@@ -674,59 +674,93 @@ def devolver_equipo(usuario: str, equipo: Equipo):
     finally:
         pausar_pantalla()
 
+def _mostrar_formulario_edicion(equipo: Equipo, campos: List[str], datos: Dict[str, str], indice_actual: int):
+    """
+    Muestra el formulario interactivo para editar la información de un equipo.
+    """
+    mostrar_encabezado(f"Editando Equipo: {equipo.placa}", color=Fore.BLUE)
+    print(Fore.CYAN + "💡 Modifique los campos necesarios. Deje en blanco para mantener el valor actual." + Style.RESET_ALL)
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+    for i, campo in enumerate(campos):
+        indicador = Fore.YELLOW + " -> " if i == indice_actual else "    "
+        valor_actual = getattr(equipo, campo.lower().replace(" ", "_").replace("ú", "u"))
+        valor_mostrado = datos.get(campo, "")
+        if valor_mostrado:
+            valor_mostrado = f"{Fore.GREEN}{valor_mostrado}{Style.RESET_ALL}"
+        else:
+            valor_mostrado = f"{Fore.CYAN}(Actual: {valor_actual}){Style.RESET_ALL}"
+        print(f"{indicador}{campo.ljust(20)}: {valor_mostrado}")
+
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+
 @requiere_permiso("gestionar_equipo")
 def editar_equipo(usuario: str, equipo: Equipo):
+    """Función mejorada para editar un equipo con una interfaz interactiva."""
+    campos_editables = ["Tipo", "Marca", "Modelo", "Serial"]
+    datos_nuevos = {campo: "" for campo in campos_editables}
+    indice_actual = 0
+
     try:
-        os.system('cls' if os.name == 'nt' else 'clear')
-        mostrar_encabezado(f"Editando Equipo: {equipo.placa}", color=Fore.BLUE)
-        print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
-        
-        tipo_nuevo = seleccionar_parametro('tipo_equipo', 'Tipo de Equipo', valor_actual=equipo.tipo)
-        if tipo_nuevo is None: return
-        
-        marca_nueva = seleccionar_parametro('marca_equipo', 'Marca', valor_actual=equipo.marca)
-        if marca_nueva is None: return
-        
-        print("\nDeje el campo en blanco y presione Enter para mantener el valor actual.")
-        
-        while True:
-            modelo_nuevo = input(Fore.YELLOW + f"Modelo ({Fore.CYAN}{equipo.modelo}{Fore.YELLOW}): " + Style.RESET_ALL).strip() or equipo.modelo
-            if validar_campo_general(modelo_nuevo):
-                break
-            print(Fore.RED + "Modelo inválido. Solo se permiten letras, números, espacios y (- _ . ,).")
-        
-        while True:
-            serial_nuevo = input(Fore.YELLOW + f"Serie ({Fore.CYAN}{equipo.serial}{Fore.YELLOW}): " + Style.RESET_ALL).strip() or equipo.serial
-            if validar_serial(serial_nuevo):
-                break
-            print(Fore.RED + "Número de serie inválido. No se permiten espacios ni símbolos.")
-        
+        while indice_actual < len(campos_editables):
+            campo_actual = campos_editables[indice_actual]
+            # Mapeo de nombres de campo a los nombres de los parámetros en la BD
+            mapa_parametros = {"Tipo": "tipo_equipo", "Marca": "marca_equipo"}
+
+            _mostrar_formulario_edicion(equipo, campos_editables, datos_nuevos, indice_actual)
+
+            if campo_actual in ["Tipo", "Marca"]:
+                tipo_parametro = mapa_parametros[campo_actual]
+                valor_actual_equipo = getattr(equipo, campo_actual.lower())
+                nuevo_valor = seleccionar_parametro(tipo_parametro, campo_actual, valor_actual=valor_actual_equipo)
+                if not nuevo_valor:  # Si el usuario cancela la selección
+                    continue
+                datos_nuevos[campo_actual] = nuevo_valor
+            else:
+                valor_actual_equipo = getattr(equipo, campo_actual.lower())
+                prompt = f"Ingrese el nuevo {campo_actual} ({Fore.CYAN}{valor_actual_equipo}{Fore.YELLOW}): {Style.RESET_ALL}"
+                nuevo_valor_input = input(Fore.YELLOW + prompt).strip() or valor_actual_equipo
+
+                if campo_actual == "Modelo" and not validar_campo_general(nuevo_valor_input):
+                    print(Fore.RED + "Modelo inválido. Solo se permiten letras, números, espacios y (- _ . ,).")
+                    pausar_pantalla()
+                    continue
+                elif campo_actual == "Serial" and not validar_serial(nuevo_valor_input):
+                    print(Fore.RED + "Número de serie inválido. No se permiten espacios ni símbolos.")
+                    pausar_pantalla()
+                    continue
+                datos_nuevos[campo_actual] = nuevo_valor_input
+            
+            indice_actual += 1
+
         cambios = []
-        if equipo.tipo != tipo_nuevo: cambios.append(f"Tipo: '{equipo.tipo}' -> '{tipo_nuevo}'")
-        if equipo.marca != marca_nueva: cambios.append(f"Marca: '{equipo.marca}' -> '{marca_nueva}'")
-        if equipo.modelo != modelo_nuevo: cambios.append(f"Modelo: '{equipo.modelo}' -> '{modelo_nuevo}'")
-        if equipo.serial != serial_nuevo: cambios.append(f"Serial: '{equipo.serial}' -> '{serial_nuevo}'")
-        
+        if equipo.tipo != datos_nuevos["Tipo"]: cambios.append(f"Tipo: '{equipo.tipo}' -> '{datos_nuevos['Tipo']}'")
+        if equipo.marca != datos_nuevos["Marca"]: cambios.append(f"Marca: '{equipo.marca}' -> '{datos_nuevos['Marca']}'")
+        if equipo.modelo != datos_nuevos["Modelo"]: cambios.append(f"Modelo: '{equipo.modelo}' -> '{datos_nuevos['Modelo']}'")
+        if equipo.serial != datos_nuevos["Serial"]: cambios.append(f"Serial: '{equipo.serial}' -> '{datos_nuevos['Serial']}'")
+
         if not cambios:
             print(Fore.YELLOW + "\nNo se detectaron cambios.")
+            pausar_pantalla()
             return
-            
+
         while True:
-            motivo_edicion = input(Fore.YELLOW + "Motivo de la edición: " + Style.RESET_ALL).strip()
+            motivo_edicion = input(Fore.YELLOW + "Motivo de la edición (obligatorio): " + Style.RESET_ALL).strip()
             if motivo_edicion:
                 break
             print(Fore.RED + "El motivo de la edición es obligatorio.")
 
-        print("\n" + Fore.CYAN + "--- Resumen de Cambios ---")
+        mostrar_encabezado("Resumen de Cambios", color=Fore.CYAN)
         for cambio in cambios:
             print(f"  - {cambio}")
-        print(f"  - Motivo: {motivo_edicion}")
-        print("--------------------------" + Style.RESET_ALL)
+        print(f"  - {Fore.YELLOW}Motivo:{Style.RESET_ALL} {motivo_edicion}")
+        print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
 
         if not confirmar_con_placa(equipo.placa):
             return
 
-        equipo.tipo, equipo.marca, equipo.modelo, equipo.serial = tipo_nuevo, marca_nueva, modelo_nuevo, serial_nuevo
+        equipo.tipo, equipo.marca, equipo.modelo, equipo.serial = datos_nuevos["Tipo"], datos_nuevos["Marca"], datos_nuevos["Modelo"], datos_nuevos["Serial"]
         db_manager.update_equipo(equipo)
         detalles_log = f"Cambios: {'; '.join(cambios)}. Motivo: {motivo_edicion}"
         registrar_movimiento_inventario(equipo.placa, "Edición", detalles_log, usuario)
@@ -999,54 +1033,89 @@ def registrar_mantenimiento(usuario: str, equipo: Equipo):
     finally:
         pausar_pantalla()
 
+def _mostrar_formulario_devolucion(equipo: Equipo, campos: List[str], datos: Dict[str, str], indice_actual: int):
+    """
+    Muestra el formulario interactivo para registrar la devolución de un equipo a proveedor.
+    """
+    mostrar_encabezado(f"Devolución a Proveedor - Placa: {equipo.placa}", color=Fore.BLUE)
+    print(Fore.CYAN + "--- Información del Equipo ---")
+    print(f"  {'Placa:'.ljust(15)} {equipo.placa}")
+    print(f"  {'Tipo:'.ljust(15)} {equipo.tipo}")
+    print(f"  {'Marca:'.ljust(15)} {equipo.marca}")
+    print(Style.RESET_ALL)
+    
+    print(Fore.CYAN + "💡 Complete los siguientes campos. Puede presionar Ctrl+C para cancelar." + Style.RESET_ALL)
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+    for i, campo in enumerate(campos):
+        indicador = Fore.YELLOW + " -> " if i == indice_actual else "    "
+        valor_mostrado = datos.get(campo, "")
+        if valor_mostrado:
+            valor_mostrado = f"{Fore.GREEN}{valor_mostrado}{Style.RESET_ALL}"
+        print(f"{indicador}{campo.ljust(35)}: {valor_mostrado}")
+
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+
 @requiere_permiso("devolver_a_proveedor")
 def registrar_devolucion_a_proveedor(usuario: str, equipo: Equipo):
+    """Función mejorada para registrar la devolución a proveedor con una interfaz interactiva."""
     if equipo.estado != "Disponible":
-        print(Fore.RED + f"❌ El equipo debe estar 'Disponible' para ser devuelto al proveedor (Estado actual: {equipo.estado}).")
+        print(Fore.RED + f"❌ El equipo debe estar 'Disponible' (Estado actual: {equipo.estado}).")
         pausar_pantalla()
         return
 
-    try:
-        print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
-        
-        motivos = ["Por daño", "No se necesita más", "Por hurto"]
-        motivo = seleccionar_parametro(None, "Motivo de la Devolución", lista_opciones=motivos)
-        
-        while True:
-            fecha_str = input(Fore.YELLOW + "Fecha de devolución a proveedor (DD/MM/AAAA): " + Style.RESET_ALL).strip()
-            if validar_formato_fecha(fecha_str):
-                fecha_devolucion = fecha_str
-                break
-            print(Fore.RED + "Formato de fecha inválido.")
+    campos_requeridos = ["Motivo de la Devolución", "Fecha de devolución a proveedor", "Observaciones adicionales"]
+    datos_devolucion = {campo: "" for campo in campos_requeridos}
+    indice_actual = 0
 
-        while True:
-            observaciones = input(Fore.YELLOW + "Observaciones adicionales: " + Style.RESET_ALL).strip()
-            if observaciones:
-                break
-            print(Fore.RED + "Las observaciones son obligatorias.")
+    try:
+        while indice_actual < len(campos_requeridos):
+            campo_actual = campos_requeridos[indice_actual]
+            _mostrar_formulario_devolucion(equipo, campos_requeridos, datos_devolucion, indice_actual)
+
+            if campo_actual == "Motivo de la Devolución":
+                motivos = ["Por daño", "No se necesita más", "Por hurto"]
+                motivo = seleccionar_parametro(None, "Motivo de la Devolución", lista_opciones=motivos)
+                if not motivo: continue
+                datos_devolucion[campo_actual] = motivo
+            
+            elif campo_actual == "Fecha de devolución a proveedor":
+                fecha_str = input(Fore.YELLOW + "Ingrese la fecha (DD/MM/AAAA): " + Style.RESET_ALL).strip()
+                if not validar_formato_fecha(fecha_str):
+                    print(Fore.RED + "Formato de fecha inválido.")
+                    pausar_pantalla()
+                    continue
+                datos_devolucion[campo_actual] = fecha_str
+
+            elif campo_actual == "Observaciones adicionales":
+                observaciones = input(Fore.YELLOW + "Ingrese las observaciones (obligatorio): " + Style.RESET_ALL).strip()
+                if not observaciones:
+                    print(Fore.RED + "Las observaciones son obligatorias.")
+                    pausar_pantalla()
+                    continue
+                datos_devolucion[campo_actual] = observaciones
+            
+            indice_actual += 1
         
-        print("\n" + Fore.CYAN + "--- Resumen de Devolución a Proveedor ---")
-        print(f"  {'Equipo (Placa):'.ljust(25)} {equipo.placa}")
-        print(f"  {'Motivo:'.ljust(25)} {motivo}")
-        print(f"  {'Fecha programada:'.ljust(25)} {fecha_devolucion}")
-        print(f"  {'Observaciones:'.ljust(25)} {observaciones}")
-        print(f"  {'Nuevo estado:'.ljust(25)} Pendiente Devolución a Proveedor")
-        print("-----------------------------------" + Style.RESET_ALL)
+        mostrar_encabezado("Resumen de Devolución a Proveedor", color=Fore.CYAN)
+        print(f"  {'Equipo (Placa):'.ljust(35)} {equipo.placa}")
+        for campo, valor in datos_devolucion.items():
+            print(f"  {campo.ljust(35)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
+        print(f"  {'Nuevo estado:'.ljust(35)} {Fore.GREEN}Pendiente Devolución a Proveedor{Style.RESET_ALL}")
+        print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
 
         if not confirmar_con_placa(equipo.placa):
             return
 
         estado_anterior = equipo.estado
         equipo.estado = "Pendiente Devolución a Proveedor"
-        equipo.fecha_devolucion_proveedor = fecha_devolucion
-        equipo.motivo_devolucion = motivo
-        equipo.observaciones = observaciones
-        equipo.asignado_a = None
-        equipo.email_asignado = None
-        equipo.fecha_devolucion_prestamo = None
-
+        equipo.fecha_devolucion_proveedor = datos_devolucion["Fecha de devolución a proveedor"]
+        equipo.motivo_devolucion = datos_devolucion["Motivo de la Devolución"]
+        equipo.observaciones = datos_devolucion["Observaciones adicionales"]
+        
         db_manager.update_equipo(equipo)
-        detalles = f"Motivo: {motivo}. Fecha prog.: {fecha_devolucion}. Obs: {observaciones}. Estado anterior: {estado_anterior}"
+        detalles = f"Motivo: {equipo.motivo_devolucion}. Fecha prog.: {equipo.fecha_devolucion_proveedor}. Obs: {equipo.observaciones}. Estado anterior: {estado_anterior}"
         registrar_movimiento_inventario(equipo.placa, "Registro Devolución Proveedor", detalles, usuario)
         print(Fore.GREEN + f"\n✅ Equipo {equipo.placa} registrado para devolución a proveedor.")
 
