@@ -6,6 +6,7 @@ from colorama import Fore, Style
 
 # --- MODELOS DE DATOS ---
 class Equipo:
+    # --- MODIFICACIÓN: Añadidos nuevos campos ---
     def __init__(self, placa: str, tipo: str, marca: str, modelo: str, serial: str,
                  estado: str = "Disponible", asignado_a: Optional[str] = None,
                  email_asignado: Optional[str] = None, observaciones: Optional[str] = None,
@@ -16,7 +17,10 @@ class Equipo:
                  estado_anterior: Optional[str] = None,
                  renovacion_placa_asociada: Optional[str] = None,
                  fecha_entrega_renovacion: Optional[str] = None,
-                 proveedor: Optional[str] = None):
+                 proveedor: Optional[str] = None,
+                 ram: Optional[str] = None,
+                 disco_duro: Optional[str] = None,
+                 sistema_operativo: Optional[str] = None):
         self.placa = placa
         self.tipo = tipo
         self.marca = marca
@@ -34,6 +38,9 @@ class Equipo:
         self.renovacion_placa_asociada = renovacion_placa_asociada
         self.fecha_entrega_renovacion = fecha_entrega_renovacion
         self.proveedor = proveedor
+        self.ram = ram
+        self.disco_duro = disco_duro
+        self.sistema_operativo = sistema_operativo
 
     def to_dict(self) -> Dict:
         return self.__dict__
@@ -89,6 +96,7 @@ class DatabaseManager:
 
     def create_tables(self):
         cursor = self.conn.cursor()
+        # --- MODIFICACIÓN: Añadidos nuevos campos a la tabla equipos ---
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS equipos (
                 placa TEXT PRIMARY KEY, tipo TEXT NOT NULL, marca TEXT NOT NULL,
@@ -97,7 +105,8 @@ class DatabaseManager:
                 fecha_registro TEXT, fecha_devolucion_prestamo TEXT,
                 fecha_devolucion_proveedor TEXT, motivo_devolucion TEXT,
                 estado_anterior TEXT, renovacion_placa_asociada TEXT,
-                fecha_entrega_renovacion TEXT, proveedor TEXT
+                fecha_entrega_renovacion TEXT, proveedor TEXT,
+                ram TEXT, disco_duro TEXT, sistema_operativo TEXT
             )
         ''')
         cursor.execute('''
@@ -130,7 +139,6 @@ class DatabaseManager:
                 UNIQUE(tipo, valor)
             )
         ''')
-        # --- NUEVA TABLA ---
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS proveedores (
                 nombre TEXT PRIMARY KEY,
@@ -149,7 +157,10 @@ class DatabaseManager:
                 ('estado_anterior', 'TEXT'),
                 ('renovacion_placa_asociada', 'TEXT'),
                 ('fecha_entrega_renovacion', 'TEXT'),
-                ('proveedor', 'TEXT')
+                ('proveedor', 'TEXT'),
+                ('ram', 'TEXT'),
+                ('disco_duro', 'TEXT'),
+                ('sistema_operativo', 'TEXT')
             ],
             'usuarios': [
                 ('nombre_completo', 'TEXT'),
@@ -159,7 +170,7 @@ class DatabaseManager:
             'parametros': [
                 ('is_active', 'INTEGER NOT NULL DEFAULT 1')
             ],
-            'proveedores': [ # --- NUEVA COLUMNA ---
+            'proveedores': [
                 ('is_active', 'INTEGER NOT NULL DEFAULT 1')
             ]
         }
@@ -183,9 +194,9 @@ class DatabaseManager:
     # --- Métodos para Equipos ---
     def insert_equipo(self, equipo: Equipo):
         self.execute_query('''
-            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion, estado_anterior, renovacion_placa_asociada, fecha_entrega_renovacion, proveedor)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.proveedor))
+            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion, estado_anterior, renovacion_placa_asociada, fecha_entrega_renovacion, proveedor, ram, disco_duro, sistema_operativo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.proveedor, equipo.ram, equipo.disco_duro, equipo.sistema_operativo))
         self.commit()
 
     def get_all_equipos(self) -> List[Dict]:
@@ -258,12 +269,14 @@ class DatabaseManager:
         self.execute_query('''
             UPDATE equipos SET tipo = ?, marca = ?, modelo = ?, serial = ?, estado = ?, asignado_a = ?,
             email_asignado = ?, observaciones = ?, fecha_devolucion_prestamo = ?, fecha_devolucion_proveedor = ?,
-            motivo_devolucion = ?, estado_anterior = ?, renovacion_placa_asociada = ?, fecha_entrega_renovacion = ?, proveedor = ?
+            motivo_devolucion = ?, estado_anterior = ?, renovacion_placa_asociada = ?, fecha_entrega_renovacion = ?, proveedor = ?,
+            ram = ?, disco_duro = ?, sistema_operativo = ?
             WHERE placa = ?
         ''', (equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a,
               equipo.email_asignado, equipo.observaciones, equipo.fecha_devolucion_prestamo,
               equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, 
-              equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.proveedor, equipo.placa))
+              equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.proveedor,
+              equipo.ram, equipo.disco_duro, equipo.sistema_operativo, equipo.placa))
         self.commit()
 
     def delete_equipo(self, placa: str):
@@ -407,8 +420,12 @@ class DatabaseManager:
         self.execute_query('INSERT INTO proveedores (nombre, placa_inicial, is_active) VALUES (?, ?, 1)', (nombre, placa_inicial))
         self.commit()
     
-    def get_all_proveedores(self) -> List[Dict]:
-        cursor = self.execute_query('SELECT * FROM proveedores ORDER BY nombre')
+    def get_all_proveedores(self, solo_activos: bool = False) -> List[Dict]:
+        query = 'SELECT * FROM proveedores'
+        if solo_activos:
+            query += ' WHERE is_active = 1'
+        query += ' ORDER BY nombre'
+        cursor = self.execute_query(query)
         return [dict(row) for row in cursor.fetchall()]
 
     def get_proveedor_by_name(self, nombre: str) -> Optional[Dict]:
@@ -416,7 +433,6 @@ class DatabaseManager:
         row = cursor.fetchone()
         return dict(row) if row else None
         
-    # --- NUEVA FUNCIÓN ---
     def update_proveedor_status(self, nombre: str, new_status: bool):
         self.execute_query('UPDATE proveedores SET is_active = ? WHERE nombre = ?', (int(new_status), nombre))
         self.commit()

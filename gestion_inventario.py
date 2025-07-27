@@ -9,10 +9,12 @@ from colorama import Fore, Style
 
 from database import db_manager, Equipo, registrar_movimiento_inventario, registrar_movimiento_sistema
 from ui import mostrar_encabezado, mostrar_menu, pausar_pantalla, confirmar_con_placa
-from gestion_acceso import requiere_permiso
+from gestion_acceso import requiere_permiso, gestionar_parametros, gestionar_proveedores
 from gestion_reportes import generar_excel_historico_equipo
 
 # --- INICIO DE MODIFICACIÓN PARA REGISTRO DE EQUIPO ---
+
+
 
 def _mostrar_formulario_interactivo(campos: List[str], datos: Dict[str, str], indice_actual: int):
     """
@@ -28,7 +30,8 @@ def _mostrar_formulario_interactivo(campos: List[str], datos: Dict[str, str], in
         valor_mostrado = datos.get(campo, "")
         if valor_mostrado:
             valor_mostrado = f"{Fore.GREEN}{valor_mostrado}{Style.RESET_ALL}"
-        print(f"{indicador}{campo.ljust(20)}: {valor_mostrado}")
+            
+        print(f"{indicador}{campo.ljust(28)}: {valor_mostrado}")
 
     print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
 
@@ -36,45 +39,82 @@ def _mostrar_formulario_interactivo(campos: List[str], datos: Dict[str, str], in
 @requiere_permiso("registrar_equipo")
 def registrar_equipo(usuario: str):
     """Función mejorada para registrar un nuevo equipo con una interfaz interactiva."""
-    tipos_existentes = db_manager.get_parametros_por_tipo('tipo_equipo', solo_activos=True)
-    marcas_existentes = db_manager.get_parametros_por_tipo('marca_equipo', solo_activos=True)
+    # --- VALIDACIÓN INICIAL DE PARÁMETROS ---
+    configuraciones_faltantes = []
+    if not db_manager.get_parametros_por_tipo('tipo_equipo', solo_activos=True):
+        configuraciones_faltantes.append({'nombre': 'Tipos de Equipo', 'funcion': lambda: gestionar_parametros(usuario, 'tipo_equipo', 'Tipo de Equipo')})
+    if not db_manager.get_parametros_por_tipo('marca_equipo', solo_activos=True):
+        configuraciones_faltantes.append({'nombre': 'Marcas', 'funcion': lambda: gestionar_parametros(usuario, 'marca_equipo', 'Marca')})
+    if not db_manager.get_all_proveedores(solo_activos=True):
+        configuraciones_faltantes.append({'nombre': 'Proveedores', 'funcion': lambda: gestionar_proveedores(usuario)})
 
-    if not tipos_existentes or not marcas_existentes:
+    if configuraciones_faltantes:
         mostrar_encabezado("Registro de Nuevo Equipo", color=Fore.RED)
-        print(Fore.RED + "❌ No se puede registrar un nuevo equipo.")
-        if not tipos_existentes: print(Fore.YELLOW + "   - No hay 'Tipos de Equipo' activos configurados.")
-        if not marcas_existentes: print(Fore.YELLOW + "   - No hay 'Marcas' activas configuradas.")
-        print(Fore.CYAN + "Por favor, pida a un Administrador que configure estos parámetros.")
-        pausar_pantalla()
+        print(Fore.RED + "❌ No se puede registrar un nuevo equipo. Faltan configuraciones.")
+        for item in configuraciones_faltantes:
+            print(Fore.YELLOW + f"   - No hay '{item['nombre']}' activos configurados.")
+        
+        print(Fore.CYAN + "\n¿Desea ir al menú de configuración para solucionar esto?")
+        opcion = input(Fore.YELLOW + "(S/N): " + Style.RESET_ALL).strip().upper()
+        if opcion == 'S':
+            if len(configuraciones_faltantes) == 1:
+                configuraciones_faltantes[0]['funcion']()
+            else:
+                from main import menu_configuracion_sistema
+                menu_configuracion_sistema(usuario)
         return
 
-    campos_requeridos = ["Placa", "Tipo de Equipo", "Marca", "Modelo", "Número de serie", "Observaciones"]
+    campos_requeridos = [
+        "Proveedor", "Placa", "Tipo de Equipo", "Marca", "Modelo", "Número de serie",
+        "Capacidad Memoria RAM", "Capacidad Disco Duro", "Sistema Operativo", "Observaciones"
+    ]
     datos_equipo = {campo: "" for campo in campos_requeridos}
     indice_actual = 0
+    placa_inicial_proveedor = ""
     
     try:
         while indice_actual < len(campos_requeridos):
             campo_actual = campos_requeridos[indice_actual]
             _mostrar_formulario_interactivo(campos_requeridos, datos_equipo, indice_actual)
 
-            if campo_actual == "Placa":
-                placa = input(Fore.YELLOW + "Ingrese la Placa del equipo: " + Style.RESET_ALL).strip().upper()
-                if not validar_placa_formato(placa):
-                    print(Fore.RED + "⚠️ Formato de placa inválido (mín. 4 caracteres alfanuméricos).")
+            if campo_actual == "Proveedor":
+                proveedor_seleccionado = seleccionar_parametro('proveedor', 'Proveedor', solo_activos=True)
+                if not proveedor_seleccionado: continue
+                datos_equipo[campo_actual] = proveedor_seleccionado
+                
+                proveedor_info = db_manager.get_proveedor_by_name(proveedor_seleccionado)
+                placa_inicial_proveedor = proveedor_info.get('placa_inicial', '')
+
+            elif campo_actual == "Placa":
+                if placa_inicial_proveedor:
+                    print(Fore.YELLOW + "Ingrese la Placa del equipo: " + Style.RESET_ALL + placa_inicial_proveedor, end="")
+                    placa_complemento = input().strip().upper()
+                    placa_completa = placa_inicial_proveedor + placa_complemento
+                else:
+                    placa_completa = input(Fore.YELLOW + "Ingrese la Placa del equipo: " + Style.RESET_ALL).strip().upper()
+
+                if placa_inicial_proveedor and not placa_completa.startswith(placa_inicial_proveedor):
+                    print(Fore.RED + f"❌ La placa no es válida para este proveedor. Debe comenzar con '{placa_inicial_proveedor}'.")
                     pausar_pantalla()
                     continue
-                equipo_existente = db_manager.get_equipo_by_placa(placa)
+
+                if not validar_placa_formato(placa_completa):
+                    print(Fore.RED + "⚠️ Formato de placa inválido (mín. 4 caracteres, solo letras, números y guiones).")
+                    pausar_pantalla()
+                    continue
+                
+                equipo_existente = db_manager.get_equipo_by_placa(placa_completa)
                 if equipo_existente:
                     if equipo_existente['estado'] == "Devuelto a Proveedor":
-                        print(Fore.YELLOW + f"\n⚠️ Este equipo (Placa: {placa}) ya existe y fue devuelto al proveedor.")
+                        print(Fore.YELLOW + f"\n⚠️ Este equipo (Placa: {placa_completa}) ya existe y fue devuelto al proveedor.")
                         confirmacion = input(Fore.YELLOW + "¿Desea reactivarlo? (S/N): " + Style.RESET_ALL).strip().upper()
                         if confirmacion == 'S':
                             equipo_reactivado = Equipo(**equipo_existente)
                             equipo_reactivado.estado = "Disponible"
                             equipo_reactivado.asignado_a = None
                             db_manager.update_equipo(equipo_reactivado)
-                            registrar_movimiento_inventario(placa, "Reactivación", "Equipo reactivado en el inventario.", usuario)
-                            print(Fore.GREEN + f"\n✅ ¡Equipo {placa} reactivado!")
+                            registrar_movimiento_inventario(placa_completa, "Reactivación", "Equipo reactivado en el inventario.", usuario)
+                            print(Fore.GREEN + f"\n✅ ¡Equipo {placa_completa} reactivado!")
                             pausar_pantalla()
                             return
                         else:
@@ -85,29 +125,67 @@ def registrar_equipo(usuario: str):
                         print(Fore.RED + "⚠️ Esta placa ya está registrada y activa en el sistema.")
                         pausar_pantalla()
                         continue
-                datos_equipo[campo_actual] = placa
+                datos_equipo[campo_actual] = placa_completa
+
             elif campo_actual == "Tipo de Equipo":
-                tipo = seleccionar_parametro('tipo_equipo', 'Tipo de Equipo')
+                tipo = seleccionar_parametro('tipo_equipo', 'Tipo de Equipo', solo_activos=True)
                 if not tipo: continue
                 datos_equipo[campo_actual] = tipo
             elif campo_actual == "Marca":
-                marca = seleccionar_parametro('marca_equipo', 'Marca')
+                marca = seleccionar_parametro('marca_equipo', 'Marca', solo_activos=True)
                 if not marca: continue
                 datos_equipo[campo_actual] = marca
             elif campo_actual == "Modelo":
-                modelo = input(Fore.YELLOW + "Ingrese el Modelo: " + Style.RESET_ALL).strip()
+                modelo = input(Fore.YELLOW + "Ingrese el Modelo: " + Style.RESET_ALL).strip().upper()
                 if not validar_campo_general(modelo):
                     print(Fore.RED + "Modelo inválido. Solo se permiten letras, números y (- _ . ,).")
                     pausar_pantalla()
                     continue
                 datos_equipo[campo_actual] = modelo
             elif campo_actual == "Número de serie":
-                serial = input(Fore.YELLOW + "Ingrese el Número de serie: " + Style.RESET_ALL).strip()
+                serial = input(Fore.YELLOW + "Ingrese el Número de serie: " + Style.RESET_ALL).strip().upper()
                 if not validar_serial(serial):
                     print(Fore.RED + "Número de serie inválido. No se permiten espacios ni símbolos.")
                     pausar_pantalla()
                     continue
                 datos_equipo[campo_actual] = serial
+            
+            elif campo_actual == "Capacidad Memoria RAM":
+                opciones_ram = ["4GB", "8GB", "16GB", "32GB", "Otro"]
+                seleccion = seleccionar_parametro(None, "Capacidad de RAM", lista_opciones=opciones_ram)
+                if seleccion == "Otro":
+                    while True:
+                        try:
+                            otro_valor = int(input(Fore.YELLOW + "Ingrese la capacidad en GB: " + Style.RESET_ALL))
+                            datos_equipo[campo_actual] = f"{otro_valor}GB"
+                            break
+                        except ValueError:
+                            print(Fore.RED + "Por favor, ingrese solo el número.")
+                elif seleccion:
+                    datos_equipo[campo_actual] = seleccion
+
+            elif campo_actual == "Capacidad Disco Duro":
+                opciones_disco = ["256GB", "512GB", "1TB", "Otro"]
+                seleccion = seleccionar_parametro(None, "Capacidad de Disco Duro", lista_opciones=opciones_disco)
+                if seleccion == "Otro":
+                     while True:
+                        try:
+                            otro_valor = int(input(Fore.YELLOW + "Ingrese la capacidad en GB: " + Style.RESET_ALL))
+                            datos_equipo[campo_actual] = f"{otro_valor}GB"
+                            break
+                        except ValueError:
+                            print(Fore.RED + "Por favor, ingrese solo el número.")
+                elif seleccion:
+                    datos_equipo[campo_actual] = seleccion
+
+            elif campo_actual == "Sistema Operativo":
+                opciones_so = ["Windows 10", "Windows 11", "Linux", "macOS", "Otro"]
+                seleccion = seleccionar_parametro(None, "Sistema Operativo", lista_opciones=opciones_so)
+                if seleccion == "Otro":
+                    datos_equipo[campo_actual] = input(Fore.YELLOW + "Ingrese el Sistema Operativo: " + Style.RESET_ALL).strip()
+                elif seleccion:
+                    datos_equipo[campo_actual] = seleccion
+
             elif campo_actual == "Observaciones":
                 observaciones = input(Fore.YELLOW + "Ingrese Observaciones (opcional): " + Style.RESET_ALL).strip() or "Ninguna"
                 datos_equipo[campo_actual] = observaciones
@@ -115,27 +193,95 @@ def registrar_equipo(usuario: str):
 
         mostrar_encabezado("Resumen del Nuevo Equipo", color=Fore.CYAN)
         for campo, valor in datos_equipo.items():
-            print(f"  {campo.ljust(20)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
+            print(f"  {campo.ljust(25)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
         print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
 
         if not confirmar_con_placa(datos_equipo["Placa"]):
              return
 
         nuevo_equipo = Equipo(
-            placa=datos_equipo["Placa"], tipo=datos_equipo["Tipo de Equipo"], marca=datos_equipo["Marca"],
-            modelo=datos_equipo["Modelo"], serial=datos_equipo["Número de serie"], observaciones=datos_equipo["Observaciones"]
+            placa=datos_equipo["Placa"], 
+            tipo=datos_equipo["Tipo de Equipo"], 
+            marca=datos_equipo["Marca"],
+            modelo=datos_equipo["Modelo"], 
+            serial=datos_equipo["Número de serie"], 
+            observaciones=datos_equipo["Observaciones"],
+            proveedor=datos_equipo["Proveedor"],
+            ram=datos_equipo["Capacidad Memoria RAM"],
+            disco_duro=datos_equipo["Capacidad Disco Duro"],
+            sistema_operativo=datos_equipo["Sistema Operativo"]
         )
+        
         db_manager.insert_equipo(nuevo_equipo)
         registrar_movimiento_inventario(
             nuevo_equipo.placa, "Registro", f"Nuevo equipo registrado: {nuevo_equipo.tipo} {nuevo_equipo.marca} {nuevo_equipo.modelo}", usuario
         )
+        
         print(Fore.GREEN + f"\n✅ ¡Equipo con placa {nuevo_equipo.placa} registrado exitosamente!")
+        
+        while True:
+            gestionar = input(Fore.YELLOW + "¿Desea gestionar este equipo ahora? (S/N): " + Style.RESET_ALL).strip().upper()
+            if gestionar == 'S':
+                menu_gestion_especifica(usuario, nuevo_equipo)
+                break
+            elif gestionar == 'N':
+                break
+            else:
+                print(Fore.RED + "Opción no válida. Por favor, ingrese S o N.")
+
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación de registro cancelada.")
     finally:
         pausar_pantalla()
 
-# --- FIN DE MODIFICACIÓN PARA REGISTRO DE EQUIPO ---
+
+# --- FUNCIÓN CORREGIDA ---
+def validar_placa_formato(placa: str) -> bool:
+    if len(placa) < 4:
+        return False
+    for char in placa:
+        if not (char.isalnum() or char == '-'):
+            return False
+    return True
+
+def seleccionar_parametro(tipo_parametro: Optional[str], nombre_amigable: str, lista_opciones: Optional[List[str]] = None, valor_actual: Optional[str] = None, solo_activos: bool = False) -> Optional[str]:
+    """Función mejorada para seleccionar un parámetro, con opción de mantener el valor actual."""
+    if lista_opciones is not None:
+        parametros = lista_opciones
+        es_proveedor = False
+    elif tipo_parametro == 'proveedor':
+        proveedores_data = db_manager.get_all_proveedores(solo_activos=solo_activos)
+        parametros = [f"{p['nombre']} ({p['placa_inicial']})" if p['placa_inicial'] else p['nombre'] for p in proveedores_data]
+        es_proveedor = True
+    else:
+        parametros = [p['valor'] for p in db_manager.get_parametros_por_tipo(tipo_parametro, solo_activos=solo_activos)]
+        es_proveedor = False
+    
+    while True:
+        print(Fore.GREEN + f"\nSeleccione un {nombre_amigable}:")
+        if valor_actual:
+            print(Fore.CYAN + f"-> Valor actual: {valor_actual}. Deje en blanco y presione Enter para mantenerlo." + Style.RESET_ALL)
+        
+        for i, param in enumerate(parametros, 1):
+            print(f"{i}. {param}")
+        print()
+
+        seleccion = input(Fore.YELLOW + "Opción: " + Style.RESET_ALL).strip()
+        
+        if not seleccion and valor_actual:
+            return valor_actual
+
+        try:
+            idx = int(seleccion) - 1
+            if 0 <= idx < len(parametros):
+                if es_proveedor:
+                    return parametros[idx].split(' (')[0]
+                return parametros[idx]
+            else:
+                print(Fore.RED + "Selección fuera de rango.")
+        except ValueError:
+            print(Fore.RED + "Por favor, ingrese un número.")
+            
 
 # --- INICIO DE MODIFICACIÓN PARA ASIGNACIÓN DE EQUIPO ---
 
@@ -292,9 +438,6 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
     finally:
         pausar_pantalla()
 
-# --- FIN DE MODIFICACIÓN PARA ASIGNACIÓN DE EQUIPO ---
-
-
 # --- FUNCIONES DE UTILIDAD Y VALIDACIÓN (Sin cambios) ---
 def validar_placa_unica(placa: str) -> bool:
     return db_manager.get_equipo_by_placa(placa) is None
@@ -302,9 +445,6 @@ def validar_placa_unica(placa: str) -> bool:
 def validar_email(email: str) -> bool:
     # Expresión regular mejorada para validar emails
     return re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email) is not None
-
-def validar_placa_formato(placa: str) -> bool:
-    return len(placa) >= 4 and placa.isalnum()
 
 def validar_formato_fecha(fecha_str: str) -> Optional[datetime]:
     try:
@@ -366,35 +506,6 @@ def format_wrapped_text(label: str, text: str, width: int = 90) -> str:
     )
     return wrapper.fill(text)
     
-# --- FUNCIONES PRINCIPALES DE INVENTARIO ---
-def seleccionar_parametro(tipo_parametro: Optional[str], nombre_amigable: str, lista_opciones: Optional[List[str]] = None, valor_actual: Optional[str] = None) -> Optional[str]:
-    """Función mejorada para seleccionar un parámetro, con opción de mantener el valor actual."""
-    parametros = lista_opciones if lista_opciones is not None else [p['valor'] for p in db_manager.get_parametros_por_tipo(tipo_parametro, solo_activos=True)]
-    
-    while True:
-        print(Fore.GREEN + f"\nSeleccione un {nombre_amigable}:")
-        if valor_actual:
-            print(Fore.CYAN + f"-> Valor actual: {valor_actual}. Deje en blanco y presione Enter para mantenerlo." + Style.RESET_ALL)
-        
-        for i, param in enumerate(parametros, 1):
-            print(f"{i}. {param}")
-        print()
-
-        seleccion = input(Fore.YELLOW + "Opción: " + Style.RESET_ALL).strip()
-        
-        if not seleccion and valor_actual:
-            return valor_actual
-
-        try:
-            idx = int(seleccion) - 1
-            if 0 <= idx < len(parametros):
-                return parametros[idx]
-            else:
-                print(Fore.RED + "Selección fuera de rango.")
-        except ValueError:
-            print(Fore.RED + "Por favor, ingrese un número.")
-
-
 @requiere_permiso("gestionar_equipo")
 def gestionar_equipos(usuario: str):
     mostrar_encabezado("Gestión de Equipos", color=Fore.BLUE)
@@ -442,34 +553,51 @@ def gestionar_equipos(usuario: str):
         print(Fore.CYAN + "\n🚫 Operación de gestión cancelada.")
         pausar_pantalla()
 
-# gestion_inventario.py
 
 def menu_gestion_especifica(usuario: str, equipo: Equipo):
     while True:
-        # La llamada a mostrar_encabezado se encarga de limpiar la pantalla al inicio de cada ciclo.
         mostrar_encabezado(f"Gestionando Equipo - PLACA: {equipo.placa}", color=Fore.GREEN)
-        
+
         print(Fore.CYAN + "--- Información del Equipo ---")
-        print(f"  {'Tipo:'.ljust(25)} {equipo.tipo}")
-        print(f"  {'Marca:'.ljust(25)} {equipo.marca}")
-        print(f"  {'Modelo:'.ljust(25)} {equipo.modelo}")
-        print(f"  {'Serial:'.ljust(25)} {equipo.serial}")
-        
+
+        info = {
+            "Tipo de Equipo": equipo.tipo,
+            "Cap. Memoria RAM": equipo.ram,
+            "Modelo": equipo.modelo,
+            "Cap. Disco Duro": equipo.disco_duro,
+            "Marca": equipo.marca,
+            "SO": equipo.sistema_operativo
+        }
+
+        claves = list(info.keys())
+        for i in range(0, len(claves), 2):
+            clave1 = claves[i]
+            valor1 = info[clave1] or "N/A"
+            linea = f"  {clave1.ljust(20)}: {valor1.ljust(30)}"
+
+            if i + 1 < len(claves):
+                clave2 = claves[i + 1]
+                valor2 = info[clave2] or "N/A"
+                linea += f"| {clave2.ljust(20)}: {valor2}"
+            print(linea)
+
         print(Fore.CYAN + "\n--- Estado y Asignación ---")
-        
+
         ultimo_movimiento = db_manager.get_last_movimiento_by_placa(equipo.placa)
-        fecha_estado = ""
+        
+        # --- MODIFICACIÓN: Mostrar el estado y la fecha en líneas separadas ---
+        print(f"  {'Estado actual:'.ljust(35)} {equipo.estado}")
         if ultimo_movimiento:
             fecha_obj = datetime.strptime(ultimo_movimiento['fecha'], "%Y-%m-%d %H:%M:%S")
-            fecha_estado = f" / Desde el {fecha_obj.strftime('%d/%m/%Y')}"
-
-        print(f"  {'Estado actual:'.ljust(25)} {equipo.estado}{fecha_estado}")
+            fecha_estado = fecha_obj.strftime('%d/%m/%Y %H:%M:%S')
+            print(f"  {'Desde el:'.ljust(35)} {fecha_estado}")
 
         if equipo.asignado_a:
-            print(f"  {'Asignado a:'.ljust(25)} {equipo.asignado_a} ({equipo.email_asignado})")
+            print(f"  {'Asignado a:'.ljust(35)} {equipo.asignado_a} ({equipo.email_asignado})")
+
         if equipo.fecha_devolucion_prestamo:
-            print(f"  {'Fecha devolución (Préstamo):'.ljust(25)} {equipo.fecha_devolucion_prestamo}")
-        
+            print(f"  {'Fecha devolución (Préstamo):'.ljust(35)} {equipo.fecha_devolucion_prestamo}")
+
         if equipo.estado in ["En mantenimiento", "Pendiente Devolución a Proveedor", "Devuelto a Proveedor", "Renovación"]:
             print(Fore.YELLOW + f"⚠️  Este equipo está '{equipo.estado}'. Las acciones de gestión están limitadas.")
             opciones_limitadas = [
@@ -479,6 +607,7 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
             ]
             mostrar_menu(opciones_limitadas, "Opciones de Consulta")
             opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+
             if opcion == '1':
                 mostrar_detalles_equipo(equipo)
             elif opcion == '2':
@@ -489,7 +618,7 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
                 print(Fore.RED + "❌ Opción no válida.")
                 pausar_pantalla()
             continue
-        
+
         opciones_gestion = []
         if equipo.estado == "Disponible":
             opciones_gestion.extend([
@@ -512,7 +641,7 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
             "Eliminar equipo",
             "Volver al menú anterior"
         ])
-        
+
         mostrar_menu(opciones_gestion, titulo="Opciones disponibles para este equipo")
         opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
 
@@ -520,54 +649,71 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
             opcion_idx = int(opcion) - 1
             if 0 <= opcion_idx < len(opciones_gestion):
                 opcion_texto = opciones_gestion[opcion_idx]
-                
-                if "Asignar/Prestar equipo" in opcion_texto: asignar_o_prestar_equipo(usuario, equipo)
-                elif "Devolver equipo al inventario" in opcion_texto: devolver_equipo(usuario, equipo)
-                elif "Registrar para mantenimiento" in opcion_texto: registrar_mantenimiento(usuario, equipo)
-                elif "Registrar para devolución a Proveedor" in opcion_texto: registrar_devolucion_a_proveedor(usuario, equipo)
+
+                if "Asignar/Prestar equipo" in opcion_texto:
+                    asignar_o_prestar_equipo(usuario, equipo)
+                elif "Devolver equipo al inventario" in opcion_texto:
+                    devolver_equipo(usuario, equipo)
+                elif "Registrar para mantenimiento" in opcion_texto:
+                    registrar_mantenimiento(usuario, equipo)
+                elif "Registrar para devolución a Proveedor" in opcion_texto:
+                    registrar_devolucion_a_proveedor(usuario, equipo)
                 elif "Renovación de equipo" in opcion_texto:
-                    if registrar_renovacion(usuario, equipo): return
-                elif "Ver Detalles Completos del Equipo" in opcion_texto: mostrar_detalles_equipo(equipo)
-                elif "Ver Historial del Equipo (Excel)" in opcion_texto: generar_excel_historico_equipo(usuario, equipo)
-                elif "Editar información del equipo" in opcion_texto: editar_equipo(usuario, equipo)
+                    if registrar_renovacion(usuario, equipo):
+                        return
+                elif "Ver Detalles Completos del Equipo" in opcion_texto:
+                    mostrar_detalles_equipo(equipo)
+                elif "Ver Historial del Equipo (Excel)" in opcion_texto:
+                    generar_excel_historico_equipo(usuario, equipo)
+                elif "Editar información del equipo" in opcion_texto:
+                    editar_equipo(usuario, equipo)
                 elif "Eliminar equipo" in opcion_texto:
-                    if eliminar_equipo(usuario, equipo): return
-                elif "Volver al menú anterior" in opcion_texto: break
+                    if eliminar_equipo(usuario, equipo):
+                        return
+                elif "Volver al menú anterior" in opcion_texto:
+                    break
             else:
                 print(Fore.RED + "❌ Opción no válida. Por favor, intente de nuevo.")
                 pausar_pantalla()
         except ValueError:
             print(Fore.RED + "❌ Entrada no válida. Por favor, intente de nuevo.")
             pausar_pantalla()
-        
+
         equipo_data_actualizado = db_manager.get_equipo_by_placa(equipo.placa)
-        if not equipo_data_actualizado: break
+        if not equipo_data_actualizado:
+            break
         equipo = Equipo(**equipo_data_actualizado)
+
 
 def mostrar_detalles_equipo(equipo: Equipo):
     """Muestra una vista detallada y contextual de la información de un equipo."""
     os.system('cls' if os.name == 'nt' else 'clear')
     mostrar_encabezado(f"Detalles Completos del Equipo: Placa {equipo.placa}", color=Fore.CYAN)
 
-    # --- Sección 1: Información General ---
+    # --- Sección 1: Información General (Orden modificado) ---
     print(Fore.CYAN + "--- Información del Equipo ---" + Style.RESET_ALL)
-    print(f"  {'Placa:'.ljust(28)} {equipo.placa}")
+    print(f"  {'Fecha de Registro:'.ljust(28)} {equipo.fecha_registro}")
+    print(f"  {'Proveedor:'.ljust(28)} {equipo.proveedor or 'N/A'}")
     print(f"  {'Tipo:'.ljust(28)} {equipo.tipo}")
+    print(f"  {'Placa:'.ljust(28)} {equipo.placa}")
     print(f"  {'Marca:'.ljust(28)} {equipo.marca}")
     print(f"  {'Modelo:'.ljust(28)} {equipo.modelo}")
     print(f"  {'Serial:'.ljust(28)} {equipo.serial}")
-    print(f"  {'Fecha de Registro:'.ljust(28)} {equipo.fecha_registro}")
+    print(f"  {'Memoria RAM:'.ljust(28)} {equipo.ram or 'N/A'}")
+    print(f"  {'Disco Duro:'.ljust(28)} {equipo.disco_duro or 'N/A'}")
+    print(f"  {'Sistema Operativo:'.ljust(28)} {equipo.sistema_operativo or 'N/A'}")
 
     # --- Sección 2: Estado y Asignación (Contextual) ---
     print(Fore.CYAN + "\n--- Estado y Asignación ---" + Style.RESET_ALL)
     
     ultimo_movimiento = db_manager.get_last_movimiento_by_placa(equipo.placa)
-    fecha_estado = ""
+    
+    # --- MODIFICACIÓN: Mostrar el estado y la fecha en líneas separadas ---
+    print(f"  {'Estado Actual:'.ljust(28)} {equipo.estado}")
     if ultimo_movimiento:
         fecha_obj = datetime.strptime(ultimo_movimiento['fecha'], "%Y-%m-%d %H:%M:%S")
-        fecha_estado = f" / Desde el {fecha_obj.strftime('%d/%m/%Y')}"
-
-    print(f"  {'Estado Actual:'.ljust(28)} {equipo.estado}{fecha_estado}")
+        fecha_estado = fecha_obj.strftime('%d/%m/%Y %H:%M:%S')
+        print(f"  {'Desde el:'.ljust(28)} {fecha_estado}")
 
     if equipo.asignado_a:
         print(f"  {'Asignado a:'.ljust(28)} {equipo.asignado_a} ({equipo.email_asignado or 'Sin email'})")
@@ -625,14 +771,16 @@ def mostrar_detalles_equipo(equipo: Equipo):
     if not ultimos_movimientos:
         print("  No hay movimientos registrados para este equipo.")
     else:
-        print(f"  {Fore.YELLOW}{'FECHA':<20} {'ACCIÓN':<30} {'USUARIO':<15}{Style.RESET_ALL}")
-        print(f"  {'-'*18} {'-'*28} {'-'*13}")
+        # --- MODIFICACIÓN: Nuevo orden y formato de columnas ---
+        print(f"  {Fore.YELLOW}{'FECHA Y HORA':<25} {'USUARIO':<20} {'ACCIÓN':<30}{Style.RESET_ALL}")
+        print(f"  {'-'*23} {'-'*18} {'-'*28}")
         for mov in ultimos_movimientos:
             fecha_obj = datetime.strptime(mov['fecha'], "%Y-%m-%d %H:%M:%S")
-            fecha_formateada = fecha_obj.strftime("%d/%m/%Y %H:%M")
-            print(f"  {fecha_formateada:<20} {mov['accion']:<30} {mov['usuario']:<15}")
-
+            fecha_formateada = fecha_obj.strftime("%d/%m/%Y %H:%M:%S")
+            print(f"  {fecha_formateada:<25} {mov['usuario']:<20} {mov['accion']:<30}")
+    
     pausar_pantalla()
+    
 
 def _mostrar_formulario_devolucion_inventario(equipo: Equipo, campos: List[str], datos: Dict[str, str], indice_actual: int):
     """
