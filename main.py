@@ -8,9 +8,11 @@ from database import db_manager
 from ui import (
     mostrar_encabezado, mostrar_menu, pausar_pantalla
 )
+# MODIFICACIÓN 1: Se corrigen las funciones importadas
 from gestion_inventario import (
-    registrar_equipo, gestionar_equipos,
-    menu_gestionar_pendientes, menu_busqueda_avanzada
+    registrar_equipo, gestionar_equipos, menu_busqueda_avanzada,
+    gestionar_mantenimientos, gestionar_devoluciones_proveedor,
+    gestionar_renovaciones
 )
 from gestion_reportes import (
     menu_ver_inventario, menu_ver_ultimos_movimientos,
@@ -26,6 +28,7 @@ from estadisticas import mostrar_estadisticas
 
 load_dotenv()
 
+
 def menu_gestion_inventario(usuario: str):
     user_data = db_manager.get_user_by_username(usuario)
     rol_actual = user_data['rol']
@@ -33,35 +36,44 @@ def menu_gestion_inventario(usuario: str):
     while True:
         mostrar_encabezado("Módulo de Gestión de Inventario")
 
-        opciones_disponibles = []
-        
+        # Usaremos un diccionario para mapear el texto de la opción a la función que debe llamar
+        opciones_map = {}
+
         if "registrar_equipo" in ROLES_PERMISOS[rol_actual]: 
-            opciones_disponibles.append("Registrar nuevo equipo")
+            opciones_map["Registrar nuevo equipo"] = lambda: registrar_equipo(usuario)
         if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: 
-            opciones_disponibles.append("Gestionar Equipos")
-        
+            opciones_map["Gestionar Equipos"] = lambda: gestionar_equipos(usuario)
         if "ver_inventario" in ROLES_PERMISOS[rol_actual]:
-            opciones_disponibles.append("Búsqueda Avanzada de Equipos")
+            opciones_map["Búsqueda Avanzada de Equipos"] = lambda: menu_busqueda_avanzada(usuario)
 
         if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]:
             equipos = db_manager.get_all_equipos()
-            mantenimientos_pendientes = len([e for e in equipos if e.get('estado') == "En mantenimiento"])
-            devoluciones_pendientes = len([e for e in equipos if e.get('estado') == "Pendiente Devolución a Proveedor"])
-            renovaciones_pendientes = len([e for e in equipos if e.get('estado') == "Renovación"])
-            total_pendientes = mantenimientos_pendientes + devoluciones_pendientes + renovaciones_pendientes
             
-            color = Fore.GREEN
-            if total_pendientes > 0:
-                color = Fore.YELLOW if total_pendientes <= 2 else Fore.RED
-            
-            texto_menu_pendientes = f"Gestionar Mantenimientos y Devoluciones {color}({total_pendientes} Pendientes){Style.RESET_ALL}"
-            opciones_disponibles.append(texto_menu_pendientes)
-        
-        opciones_disponibles.append("Volver al menú principal")
+            mantenimientos = len([e for e in equipos if e.get('estado') == "En mantenimiento"])
+            devoluciones = len([e for e in equipos if e.get('estado') == "Pendiente Devolución a Proveedor"])
+            renovaciones = len([e for e in equipos if e.get('estado') == "Renovación"])
 
+            color_mantenimiento = Fore.GREEN if mantenimientos == 0 else Fore.YELLOW
+            color_devoluciones = Fore.GREEN if devoluciones == 0 else Fore.YELLOW
+            color_renovaciones = Fore.GREEN if renovaciones == 0 else Fore.YELLOW
+
+            # Creamos los textos dinámicos y los asociamos directamente a su función
+            texto_mantenimiento = f"Gestionar Equipos en Mantenimiento {color_mantenimiento}({mantenimientos}){Style.RESET_ALL}"
+            texto_devoluciones = f"Gestionar Devoluciones a Proveedor {color_devoluciones}({devoluciones}){Style.RESET_ALL}"
+            texto_renovaciones = f"Gestionar Renovaciones Pendientes {color_renovaciones}({renovaciones}){Style.RESET_ALL}"
+            
+            opciones_map[texto_mantenimiento] = lambda: gestionar_mantenimientos(usuario)
+            opciones_map[texto_devoluciones] = lambda: gestionar_devoluciones_proveedor(usuario)
+            opciones_map[texto_renovaciones] = lambda: gestionar_renovaciones(usuario)
+        
+        opciones_map["Volver al menú principal"] = None # Usamos None para indicar la acción de salir
+
+        # Convertimos las llaves del diccionario en una lista para poder enumerarlas
+        opciones_disponibles = list(opciones_map.keys())
+        
         mostrar_menu([], titulo="")
-        for i, opcion in enumerate(opciones_disponibles, 1):
-            print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
+        for i, texto_opcion in enumerate(opciones_disponibles, 1):
+            print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {texto_opcion}")
         print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
 
         opcion_input = input(Fore.YELLOW + "Seleccione una opción (o 'x' para volver): " + Style.RESET_ALL).strip()
@@ -70,30 +82,24 @@ def menu_gestion_inventario(usuario: str):
             break
             
         try:
-            opciones_map = {str(i+1): texto for i, texto in enumerate(opciones_disponibles)}
-            opcion_texto = opciones_map.get(opcion_input)
-
-            if not opcion_texto:
+            opcion_idx = int(opcion_input) - 1
+            if 0 <= opcion_idx < len(opciones_disponibles):
+                # Obtenemos el texto de la opción seleccionada por el usuario
+                texto_seleccionado = opciones_disponibles[opcion_idx]
+                # Usamos ese texto para encontrar la función correcta en el diccionario
+                funcion_a_llamar = opciones_map[texto_seleccionado]
+                
+                if funcion_a_llamar:
+                    funcion_a_llamar() # Ejecutamos la función
+                else:
+                    # Si la función es None, es la opción "Volver"
+                    break
+            else:
                 print(Fore.RED + "Opción no válida.")
                 pausar_pantalla()
-                continue
-            
-            if "Registrar nuevo equipo" in opcion_texto:
-                registrar_equipo(usuario)
-            elif "Gestionar Equipos" in opcion_texto:
-                gestionar_equipos(usuario)
-            elif "Búsqueda Avanzada" in opcion_texto:
-                menu_busqueda_avanzada(usuario)
-            elif "Gestionar Mantenimientos y Devoluciones" in opcion_texto:
-                menu_gestionar_pendientes(usuario)
-            elif "Volver al menú principal" in opcion_texto:
-                break
-            else: 
-                print(Fore.RED + "Opción no válida.")
-                pausar_pantalla()
-
         except (ValueError, IndexError):
             print(Fore.RED + "Entrada no válida.")
+            pausar_pantalla()
 
 def menu_gestion_acceso_sistema(usuario: str):
     user_data = db_manager.get_user_by_username(usuario)
@@ -137,7 +143,6 @@ def menu_accesos_rapidos():
     mostrar_encabezado("Accesos Rápidos Disponibles", color=Fore.CYAN)
     print(f"  {Fore.YELLOW}rq{Style.RESET_ALL}  - Registrar un nuevo equipo")
     print(f"  {Fore.YELLOW}gq{Style.RESET_ALL}  - Gestionar un equipo existente")
-    print(f"  {Fore.YELLOW}gmd{Style.RESET_ALL} - Gestionar Mantenimientos, Devoluciones y Renovaciones")
     print(f"  {Fore.YELLOW}vm{Style.RESET_ALL} - Ver los últimos 20 movimientos")
     print(f"\n  --- Reportes en Excel ---")
     print(f"  {Fore.YELLOW}ria{Style.RESET_ALL} - Reporte de Inventario Actual")
@@ -192,10 +197,10 @@ def menu_principal():
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido (o 'x' para salir): " + Style.RESET_ALL).strip().lower()
         
+        # MODIFICACIÓN 2: Se elimina el atajo 'gmd' obsoleto
         shortcuts = {
             'rq': lambda: registrar_equipo(usuario_logueado),
             'gq': lambda: gestionar_equipos(usuario_logueado),
-            'gmd': lambda: menu_gestionar_pendientes(usuario_logueado),
             'vm': lambda: menu_ver_ultimos_movimientos(usuario_logueado),
             'ria': lambda: generar_excel_inventario(usuario_logueado),
             'red': lambda: generar_excel_devueltos_proveedor(usuario_logueado),
