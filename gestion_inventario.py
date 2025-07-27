@@ -213,7 +213,7 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                     continue
             
             elif campo_actual == "Nombre de la Persona":
-                nombre_input = input(Fore.YELLOW + "Ingrese el Nombre y Apellido: " + Style.RESET_ALL).strip()
+                nombre_input = input(Fore.YELLOW + "¿Quién recibirá el equipo? Nombre completo: " + Style.RESET_ALL).strip()
                 nombre_asignado = formatear_y_validar_nombre(nombre_input)
                 if not nombre_asignado:
                     print(Fore.RED + "Nombre inválido. Debe contener al menos nombre y apellido.")
@@ -222,9 +222,9 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                 datos_asignacion[campo_actual] = nombre_asignado
 
             elif campo_actual == "Email de la Persona":
-                email_asignado = input(Fore.YELLOW + "Ingrese el Email: " + Style.RESET_ALL).strip().lower()
+                email_asignado = input(Fore.YELLOW + "Ingrese el correo corporativo del usuario: " + Style.RESET_ALL).strip().lower()
                 if not validar_email(email_asignado):
-                    print(Fore.RED + "Formato de email inválido.")
+                    print(Fore.RED + "Ingrese un correo corporativo válido.")
                     pausar_pantalla()
                     continue
                 try:
@@ -236,7 +236,7 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                         pausar_pantalla()
                         continue
                 except IndexError:
-                    print(Fore.RED + "Formato de email inválido.")
+                    print(Fore.RED + "Ingrese un correo corporativo válido.")
                     pausar_pantalla()
                     continue
                 datos_asignacion[campo_actual] = email_asignado
@@ -250,7 +250,7 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
                 datos_asignacion[campo_actual] = observacion
 
             elif campo_actual == "Fecha de Devolución":
-                fecha_str = input(Fore.YELLOW + "Ingrese la Fecha de Devolución (DD/MM/AAAA): " + Style.RESET_ALL).strip()
+                fecha_str = input(Fore.YELLOW + "¿Hasta qué fecha se prestará el equipo? (DD/MM/AAAA): " + Style.RESET_ALL).strip()
                 fecha_dt = validar_formato_fecha(fecha_str)
                 if not fecha_dt or fecha_dt.date() <= datetime.now().date():
                     print(Fore.RED + "Fecha inválida o no es posterior a la fecha actual.")
@@ -262,9 +262,9 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
 
         # Resumen final y confirmación
         mostrar_encabezado("Resumen de la Operación", color=Fore.CYAN)
+        print(f"  {'Equipo (Placa):'.ljust(25)}: {Fore.YELLOW}{equipo.placa}{Style.RESET_ALL}")
         for campo, valor in datos_asignacion.items():
             print(f"  {campo.ljust(25)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
-        print(f"  {'Equipo (Placa):'.ljust(25)}: {Fore.GREEN}{equipo.placa}{Style.RESET_ALL}")
         print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
 
         if not confirmar_con_placa(equipo.placa):
@@ -283,7 +283,9 @@ def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
 
         db_manager.update_equipo(equipo)
         registrar_movimiento_inventario(equipo.placa, datos_asignacion["Tipo de Operación"], detalles_log, usuario)
-        print(Fore.GREEN + f"\n✅ ¡Operación confirmada! Equipo {equipo.placa} ahora está '{equipo.estado}'.")
+        print(Fore.GREEN + f"\n✅ El equipo {equipo.placa} fue exitosamente asignado a {equipo.asignado_a}.")
+        print(Fore.CYAN + f"🔄 Nuevo estado del equipo: '{equipo.estado}'")
+
 
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación cancelada.")
