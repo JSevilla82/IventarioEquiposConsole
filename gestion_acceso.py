@@ -96,8 +96,7 @@ def login():
         
         # --- Secuencia de carga ---
         loading_messages = [
-            "Iniciando sesión...",
-            "Configurando la aplicación..."
+            "Verificando credenciales...",
         ]
         total_delay = 2  # segundos
         delay_per_message = total_delay / len(loading_messages)
