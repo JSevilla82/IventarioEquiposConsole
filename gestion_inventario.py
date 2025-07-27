@@ -3,7 +3,7 @@ import os
 import re
 import textwrap
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from colorama import Fore, Style
 
@@ -12,7 +12,160 @@ from ui import mostrar_encabezado, mostrar_menu, pausar_pantalla, confirmar_con_
 from gestion_acceso import requiere_permiso
 from gestion_reportes import generar_excel_historico_equipo
 
-# --- FUNCIONES DE UTILIDAD Y VALIDACIÓN ---
+# --- INICIO DE LA MODIFICACIÓN ---
+
+def _mostrar_formulario_interactivo(campos: List[str], datos: Dict[str, str], indice_actual: int):
+    """
+    Muestra una representación visual del formulario de registro,
+    indicando el campo actual con una flecha.
+    """
+    mostrar_encabezado("Registro de Nuevo Equipo", color=Fore.BLUE)
+    print(Fore.CYAN + "💡 Complete los siguientes campos. Puede presionar Ctrl+C para cancelar." + Style.RESET_ALL)
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+    for i, campo in enumerate(campos):
+        # El indicador visual de la flecha
+        indicador = Fore.YELLOW + " -> " if i == indice_actual else "    "
+        
+        # El valor ya ingresado
+        valor_mostrado = datos.get(campo, "")
+        if valor_mostrado:
+            valor_mostrado = f"{Fore.GREEN}{valor_mostrado}{Style.RESET_ALL}"
+
+        print(f"{indicador}{campo.ljust(20)}: {valor_mostrado}")
+
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+
+@requiere_permiso("registrar_equipo")
+def registrar_equipo(usuario: str):
+    """Función mejorada para registrar un nuevo equipo con una interfaz interactiva."""
+    
+    # Verificación inicial de parámetros necesarios
+    tipos_existentes = db_manager.get_parametros_por_tipo('tipo_equipo', solo_activos=True)
+    marcas_existentes = db_manager.get_parametros_por_tipo('marca_equipo', solo_activos=True)
+
+    if not tipos_existentes or not marcas_existentes:
+        mostrar_encabezado("Registro de Nuevo Equipo", color=Fore.RED)
+        print(Fore.RED + "❌ No se puede registrar un nuevo equipo.")
+        if not tipos_existentes: print(Fore.YELLOW + "   - No hay 'Tipos de Equipo' activos configurados.")
+        if not marcas_existentes: print(Fore.YELLOW + "   - No hay 'Marcas' activas configuradas.")
+        print(Fore.CYAN + "Por favor, pida a un Administrador que configure estos parámetros.")
+        pausar_pantalla()
+        return
+
+    # Definición de los campos y almacenamiento de datos
+    campos_requeridos = ["Placa", "Tipo de Equipo", "Marca", "Modelo", "Número de serie", "Observaciones"]
+    datos_equipo = {campo: "" for campo in campos_requeridos}
+    
+    indice_actual = 0
+    
+    try:
+        while indice_actual < len(campos_requeridos):
+            campo_actual = campos_requeridos[indice_actual]
+            _mostrar_formulario_interactivo(campos_requeridos, datos_equipo, indice_actual)
+
+            # Lógica de entrada de datos para cada campo
+            if campo_actual == "Placa":
+                placa = input(Fore.YELLOW + "Ingrese la Placa del equipo: " + Style.RESET_ALL).strip().upper()
+                if not validar_placa_formato(placa):
+                    print(Fore.RED + "⚠️ Formato de placa inválido (mín. 4 caracteres alfanuméricos).")
+                    pausar_pantalla()
+                    continue
+                
+                equipo_existente = db_manager.get_equipo_by_placa(placa)
+                if equipo_existente:
+                    if equipo_existente['estado'] == "Devuelto a Proveedor":
+                        # Lógica de reactivación
+                        print(Fore.YELLOW + f"\n⚠️ Este equipo (Placa: {placa}) ya existe y fue devuelto al proveedor.")
+                        confirmacion = input(Fore.YELLOW + "¿Desea reactivarlo? (S/N): " + Style.RESET_ALL).strip().upper()
+                        if confirmacion == 'S':
+                            equipo_reactivado = Equipo(**equipo_existente)
+                            equipo_reactivado.estado = "Disponible"
+                            equipo_reactivado.asignado_a = None
+                            db_manager.update_equipo(equipo_reactivado)
+                            registrar_movimiento_inventario(placa, "Reactivación", "Equipo reactivado en el inventario.", usuario)
+                            print(Fore.GREEN + f"\n✅ ¡Equipo {placa} reactivado!")
+                            pausar_pantalla()
+                            return # Termina la función de registro
+                        else:
+                            print(Fore.YELLOW + "Reactivación cancelada. Intente con otra placa.")
+                            pausar_pantalla()
+                            continue
+                    else:
+                        print(Fore.RED + "⚠️ Esta placa ya está registrada y activa en el sistema.")
+                        pausar_pantalla()
+                        continue
+                datos_equipo[campo_actual] = placa
+
+            elif campo_actual == "Tipo de Equipo":
+                tipo = seleccionar_parametro('tipo_equipo', 'Tipo de Equipo')
+                if not tipo: continue # Si el usuario cancela la selección
+                datos_equipo[campo_actual] = tipo
+
+            elif campo_actual == "Marca":
+                marca = seleccionar_parametro('marca_equipo', 'Marca')
+                if not marca: continue
+                datos_equipo[campo_actual] = marca
+
+            elif campo_actual == "Modelo":
+                modelo = input(Fore.YELLOW + "Ingrese el Modelo: " + Style.RESET_ALL).strip()
+                if not validar_campo_general(modelo):
+                    print(Fore.RED + "Modelo inválido. Solo se permiten letras, números y (- _ . ,).")
+                    pausar_pantalla()
+                    continue
+                datos_equipo[campo_actual] = modelo
+
+            elif campo_actual == "Número de serie":
+                serial = input(Fore.YELLOW + "Ingrese el Número de serie: " + Style.RESET_ALL).strip()
+                if not validar_serial(serial):
+                    print(Fore.RED + "Número de serie inválido. No se permiten espacios ni símbolos.")
+                    pausar_pantalla()
+                    continue
+                datos_equipo[campo_actual] = serial
+
+            elif campo_actual == "Observaciones":
+                observaciones = input(Fore.YELLOW + "Ingrese Observaciones (opcional): " + Style.RESET_ALL).strip() or "Ninguna"
+                datos_equipo[campo_actual] = observaciones
+            
+            # Avanzar al siguiente campo
+            indice_actual += 1
+
+        # Resumen final y confirmación
+        mostrar_encabezado("Resumen del Nuevo Equipo", color=Fore.CYAN)
+        for campo, valor in datos_equipo.items():
+            print(f"  {campo.ljust(20)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
+        print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+        if not confirmar_con_placa(datos_equipo["Placa"]):
+             return
+
+        # Creación y guardado del equipo
+        nuevo_equipo = Equipo(
+            placa=datos_equipo["Placa"],
+            tipo=datos_equipo["Tipo de Equipo"],
+            marca=datos_equipo["Marca"],
+            modelo=datos_equipo["Modelo"],
+            serial=datos_equipo["Número de serie"],
+            observaciones=datos_equipo["Observaciones"]
+        )
+        db_manager.insert_equipo(nuevo_equipo)
+        registrar_movimiento_inventario(
+            nuevo_equipo.placa, 
+            "Registro", 
+            f"Nuevo equipo registrado: {nuevo_equipo.tipo} {nuevo_equipo.marca} {nuevo_equipo.modelo}", 
+            usuario
+        )
+        print(Fore.GREEN + f"\n✅ ¡Equipo con placa {nuevo_equipo.placa} registrado exitosamente!")
+
+    except KeyboardInterrupt:
+        print(Fore.CYAN + "\n🚫 Operación de registro cancelada.")
+    finally:
+        pausar_pantalla()
+
+# --- FIN DE LA MODIFICACIÓN ---
+
+# --- FUNCIONES DE UTILIDAD Y VALIDACIÓN (Sin cambios) ---
 def validar_placa_unica(placa: str) -> bool:
     return db_manager.get_equipo_by_placa(placa) is None
 
@@ -111,108 +264,6 @@ def seleccionar_parametro(tipo_parametro: Optional[str], nombre_amigable: str, l
         except ValueError:
             print(Fore.RED + "Por favor, ingrese un número.")
 
-@requiere_permiso("registrar_equipo")
-def registrar_equipo(usuario: str):
-    mostrar_encabezado("Registro de Nuevo Equipo", color=Fore.BLUE)
-    
-    tipos_existentes = db_manager.get_parametros_por_tipo('tipo_equipo', solo_activos=True)
-    marcas_existentes = db_manager.get_parametros_por_tipo('marca_equipo', solo_activos=True)
-
-    if not tipos_existentes or not marcas_existentes:
-        print(Fore.RED + "❌ No se puede registrar un nuevo equipo.")
-        if not tipos_existentes: print(Fore.YELLOW + "   - No hay 'Tipos de Equipo' activos configurados.")
-        if not marcas_existentes: print(Fore.YELLOW + "   - No hay 'Marcas' activas configuradas.")
-        print(Fore.CYAN + "Por favor, pida a un Administrador que configure estos parámetros.")
-        pausar_pantalla()
-        return
-
-    try:
-        print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
-        while True:
-            placa = input(Fore.YELLOW + "Placa del equipo: " + Style.RESET_ALL).strip().upper()
-            if not validar_placa_formato(placa):
-                print(Fore.RED + "⚠️ Formato de placa inválido (mín. 4 caracteres alfanuméricos).")
-                continue
-
-            equipo_existente = db_manager.get_equipo_by_placa(placa)
-            if equipo_existente:
-                if equipo_existente['estado'] == "Devuelto a Proveedor":
-                    print(Fore.YELLOW + f"\n⚠️ Este equipo (Placa: {placa}) ya existe y fue devuelto al proveedor.")
-                    print(Fore.CYAN + "--- Información del Equipo Existente ---")
-                    print(f"  Tipo: {equipo_existente['tipo']}, Marca: {equipo_existente['marca']}, Modelo: {equipo_existente['modelo']}")
-                    print("---------------------------------------" + Style.RESET_ALL)
-                    
-                    confirmacion_reactivar = input(Fore.YELLOW + "¿Desea reactivar este equipo? (S/N): " + Style.RESET_ALL).strip().upper()
-                    if confirmacion_reactivar == 'S':
-                        if not confirmar_con_placa(placa):
-                            print(Fore.YELLOW + "Reactivación cancelada.")
-                            continue
-
-                        equipo_reactivado = Equipo(**equipo_existente)
-                        equipo_reactivado.estado = "Disponible"
-                        equipo_reactivado.estado_anterior = "Devuelto a Proveedor"
-                        equipo_reactivado.asignado_a = None
-                        equipo_reactivado.email_asignado = None
-                        equipo_reactivado.fecha_devolucion_proveedor = None
-                        equipo_reactivado.motivo_devolucion = None
-                        equipo_reactivado.fecha_registro = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        db_manager.update_equipo(equipo_reactivado)
-                        registrar_movimiento_inventario(placa, "Reactivación", "Equipo reactivado en el inventario tras devolución a proveedor.", usuario)
-                        print(Fore.GREEN + f"\n✅ ¡Equipo {placa} reactivado y disponible en el inventario!")
-                        pausar_pantalla()
-                        return
-                    else:
-                        print(Fore.YELLOW + "Reactivación cancelada.")
-                        continue
-                else:
-                    print(Fore.RED + "⚠️ Esta placa ya está registrada y activa en el sistema.")
-            else:
-                break
-        
-        tipo = seleccionar_parametro('tipo_equipo', 'Tipo de Equipo')
-        marca = seleccionar_parametro('marca_equipo', 'Marca')
-
-        while True:
-            modelo = input(Fore.YELLOW + "Modelo: " + Style.RESET_ALL).strip()
-            if validar_campo_general(modelo):
-                break
-            print(Fore.RED + "Modelo inválido. Solo se permiten letras, números, espacios y (- _ . ,).")
-        
-        while True:
-            serial = input(Fore.YELLOW + "Número de serie: " + Style.RESET_ALL).strip()
-            if validar_serial(serial):
-                break
-            print(Fore.RED + "Número de serie inválido. No se permiten espacios ni símbolos.")
-        
-        observaciones = input(Fore.YELLOW + "Observaciones (opcional): " + Style.RESET_ALL).strip() or "Ninguna"
-
-        if not all([placa, tipo, marca, modelo, serial]):
-            print(Fore.RED + "\n❌ Error: Todos los campos son obligatorios excepto observaciones.")
-            pausar_pantalla()
-            return
-
-        print("\n" + Fore.CYAN + "--- Resumen del Nuevo Equipo ---")
-        print(f"  {'Placa:'.ljust(15)} {placa}")
-        print(f"  {'Tipo:'.ljust(15)} {tipo}")
-        print(f"  {'Marca:'.ljust(15)} {marca}")
-        print(f"  {'Modelo:'.ljust(15)} {modelo}")
-        print(f"  {'Serial:'.ljust(15)} {serial}")
-        print(f"  {'Observaciones:'.ljust(15)} {observaciones}")
-        print("--------------------------------" + Style.RESET_ALL)
-
-        if not confirmar_con_placa(placa):
-             return
-
-        nuevo_equipo = Equipo(placa=placa, tipo=tipo, marca=marca, modelo=modelo, serial=serial, observaciones=observaciones)
-        db_manager.insert_equipo(nuevo_equipo)
-        registrar_movimiento_inventario(placa, "Registro", f"Nuevo equipo registrado: {tipo} {marca} {modelo}", usuario)
-        print(Fore.GREEN + f"\n✅ ¡Equipo con placa {placa} registrado exitosamente!")
-
-    except KeyboardInterrupt:
-        print(Fore.CYAN + "\n🚫 Operación de registro cancelada.")
-    finally:
-        pausar_pantalla()
 
 @requiere_permiso("gestionar_equipo")
 def gestionar_equipos(usuario: str):
@@ -715,7 +766,7 @@ def registrar_renovacion(usuario: str, equipo_actual: Equipo) -> bool:
             equipo_nuevo = Equipo(**equipo_nuevo_data)
             break
             
-        print(Fore.YELLOW + textwrap.dedent("""\
+        print(Fore.YELLOW + textwrap.dedent("""
             \n⚠️  ATENCIÓN: Este proceso implica realizar el cambio del equipo por otro.
             Este equipo se enviará al proveedor. Si va a ser utilizado nuevamente
             deberá ser reactivado en 'Registrar nuevo equipo'."""))
