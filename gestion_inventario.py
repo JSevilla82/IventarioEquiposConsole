@@ -585,15 +585,18 @@ def menu_gestion_especifica(usuario: str, equipo: Equipo):
 
         ultimo_movimiento = db_manager.get_last_movimiento_by_placa(equipo.placa)
         
-        # --- MODIFICACIÓN: Mostrar el estado y la fecha en líneas separadas ---
         print(f"  {'Estado actual:'.ljust(35)} {equipo.estado}")
         if ultimo_movimiento:
             fecha_obj = datetime.strptime(ultimo_movimiento['fecha'], "%Y-%m-%d %H:%M:%S")
             fecha_estado = fecha_obj.strftime('%d/%m/%Y %H:%M:%S')
             print(f"  {'Desde el:'.ljust(35)} {fecha_estado}")
-
+        
+        # --- MODIFICACIÓN: Etiqueta contextual (asignado vs. prestado) ---
         if equipo.asignado_a:
-            print(f"  {'Asignado a:'.ljust(35)} {equipo.asignado_a} ({equipo.email_asignado})")
+            etiqueta_asignacion = "Asignado a:"
+            if equipo.estado == "En préstamo":
+                etiqueta_asignacion = "Prestado a:"
+            print(f"  {etiqueta_asignacion.ljust(35)} {equipo.asignado_a} ({equipo.email_asignado})")
 
         if equipo.fecha_devolucion_prestamo:
             print(f"  {'Fecha devolución (Préstamo):'.ljust(35)} {equipo.fecha_devolucion_prestamo}")
@@ -788,14 +791,18 @@ def _mostrar_formulario_devolucion_inventario(equipo: Equipo, campos: List[str],
     """
     mostrar_encabezado(f"Devolver Equipo al Inventario - Placa: {equipo.placa}", color=Fore.BLUE)
 
-    # Mostrar información del equipo que se devuelve
+    # --- MODIFICACIÓN: Etiqueta contextual (asignado vs. prestado) ---
+    etiqueta_asignacion = "Actualmente asignado a:"
+    if equipo.estado == "En préstamo":
+        etiqueta_asignacion = "Actualmente prestado a:"
+
     print(Fore.CYAN + "--- Información del Equipo ---")
     print(f"  {'Placa:'.ljust(25)} {equipo.placa}")
     print(f"  {'Tipo:'.ljust(25)} {equipo.tipo}")
-    print(f"  {'Actualmente asignado a:'.ljust(25)} {equipo.asignado_a or 'N/A'}")
+    print(f"  {etiqueta_asignacion.ljust(25)} {equipo.asignado_a or 'N/A'}")
     print(Style.RESET_ALL)
 
-    print(Fore.CYAN + "💡 Complete el siguiente campo. Puede presionar Ctrl+C para cancelar." + Style.RESET_ALL)
+    print(Fore.CYAN + "💡 Complete los siguientes campos. Puede presionar Ctrl+C para cancelar." + Style.RESET_ALL)
     print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
 
     for i, campo in enumerate(campos):
@@ -817,7 +824,7 @@ def devolver_equipo(usuario: str, equipo: Equipo):
         pausar_pantalla()
         return
 
-    campos_requeridos = ["Motivo u observación de la devolución"]
+    campos_requeridos = ["Motivo de la Devolución", "Observación de la Devolución"]
     datos_devolucion = {campo: "" for campo in campos_requeridos}
     indice_actual = 0
 
@@ -826,36 +833,106 @@ def devolver_equipo(usuario: str, equipo: Equipo):
             campo_actual = campos_requeridos[indice_actual]
             _mostrar_formulario_devolucion_inventario(equipo, campos_requeridos, datos_devolucion, indice_actual)
 
-            if campo_actual == "Motivo u observación de la devolución":
-                observacion = input(Fore.YELLOW + "Ingrese el motivo (obligatorio): " + Style.RESET_ALL).strip()
-                if not observacion:
-                    print(Fore.RED + "La observación es obligatoria para la devolución. Intente de nuevo.")
-                    pausar_pantalla()
-                    continue
+            if campo_actual == "Motivo de la Devolución":
+                if equipo.estado == "Asignado":
+                    motivos = [
+                        "Retiro del colaborador",
+                        "Hurto del equipo",
+                        "Otro"
+                    ]
+                else:  # En préstamo
+                    motivos = [
+                        "Fin del período de préstamo",
+                        "Devolución anticipada",
+                        "Hurto del equipo",
+                        "Otro"
+                    ]
+                
+                seleccion = seleccionar_parametro(None, "Motivo de la Devolución", lista_opciones=motivos)
+                if not seleccion: continue
+
+                if seleccion == "Otro":
+                    motivo_personalizado = input(Fore.YELLOW + "Especifique el motivo: " + Style.RESET_ALL).strip()
+                    if not motivo_personalizado:
+                        print(Fore.RED + "El motivo no puede estar vacío si selecciona 'Otro'.")
+                        pausar_pantalla()
+                        continue
+                    datos_devolucion[campo_actual] = motivo_personalizado
+                else:
+                    datos_devolucion[campo_actual] = seleccion
+            
+            elif campo_actual == "Observación de la Devolución":
+                observacion = input(Fore.YELLOW + "Ingrese una observación (opcional): " + Style.RESET_ALL).strip() or "Ninguna"
                 datos_devolucion[campo_actual] = observacion
             
             indice_actual += 1
 
-        mostrar_encabezado("Resumen de la Devolución", color=Fore.CYAN)
-        print(f"  {'Equipo (Placa):'.ljust(25)} {equipo.placa}")
-        print(f"  {'Se retirará de:'.ljust(25)} {equipo.asignado_a or 'N/A'}")
-        print(f"  {'Estado anterior:'.ljust(25)} {equipo.estado}")
-        print(f"  {'Nuevo estado:'.ljust(25)} {Fore.GREEN}Disponible{Style.RESET_ALL}")
-        print(f"  {'Observación:'.ljust(25)} {datos_devolucion['Motivo u observación de la devolución']}")
-        print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+        if datos_devolucion['Motivo de la Devolución'] == "Hurto del equipo":
+            print(Fore.YELLOW + "\n⚠️ ATENCIÓN: Al ser un hurto, el equipo será desvinculado del usuario y se iniciará el proceso de devolución a proveedor.")
+            pausar_pantalla()
+            
+            while True:
+                fecha_str = input(Fore.YELLOW + "¿Cuándo se notificará/entregará al proveedor? (DD/MM/AAAA): " + Style.RESET_ALL).strip()
+                if validar_formato_fecha(fecha_str):
+                    break
+                print(Fore.RED + "Formato de fecha inválido.")
 
-        if not confirmar_con_placa(equipo.placa):
-            return
+            mostrar_encabezado("Resumen de Devolución por Hurto", color=Fore.RED)
+            print(f"  {'Equipo (Placa):'.ljust(35)} {equipo.placa}")
+            print(f"  {'Se retirará de:'.ljust(35)} {equipo.asignado_a or 'N/A'}")
+            print(f"  {'Motivo:'.ljust(35)} {datos_devolucion['Motivo de la Devolución']}")
+            print(f"  {'Observación:'.ljust(35)} {datos_devolucion['Observación de la Devolución']}")
+            print(f"  {'Fecha de notificación al proveedor:'.ljust(35)} {fecha_str}")
+            print(f"  {'Nuevo estado del equipo:'.ljust(35)} {Fore.YELLOW}Pendiente Devolución a Proveedor{Style.RESET_ALL}")
 
-        detalles_previos = f"Devuelto por {equipo.asignado_a or 'N/A'}. Motivo: {datos_devolucion['Motivo u observación de la devolución']}"
-        equipo.estado = "Disponible"
-        equipo.asignado_a = None
-        equipo.email_asignado = None
-        equipo.fecha_devolucion_prestamo = None
-        
-        db_manager.update_equipo(equipo)
-        registrar_movimiento_inventario(equipo.placa, "Devolución a Inventario", detalles_previos, usuario)
-        print(Fore.GREEN + f"\n✅ ¡Devolución confirmada! Equipo {equipo.placa} ahora está 'Disponible'.")
+            if not confirmar_con_placa(equipo.placa):
+                return
+
+            # --- MODIFICACIÓN: Orden y claridad de los registros de log ---
+            # 1. Registrar primero la devolución/desvinculación del usuario.
+            detalles_desvinculacion = f"Equipo retirado de {equipo.asignado_a or 'N/A'} por hurto. Obs: {datos_devolucion['Observación de la Devolución']}"
+            registrar_movimiento_inventario(equipo.placa, "Devolución a Inventario", detalles_desvinculacion, usuario)
+
+            # 2. Actualizar el estado del equipo.
+            equipo.estado = "Pendiente Devolución a Proveedor"
+            equipo.motivo_devolucion = "Hurto del equipo"
+            equipo.observaciones = datos_devolucion['Observación de la Devolución']
+            equipo.asignado_a = None
+            equipo.email_asignado = None
+            equipo.fecha_devolucion_prestamo = None
+            equipo.fecha_devolucion_proveedor = fecha_str
+            db_manager.update_equipo(equipo)
+
+            # 3. Registrar el inicio del proceso de devolución al proveedor.
+            detalles_devolucion = f"Motivo: Hurto del equipo. Fecha prog.: {fecha_str}. Obs: {datos_devolucion['Observación de la Devolución']}"
+            registrar_movimiento_inventario(equipo.placa, "Registro Devolución Proveedor", detalles_devolucion, usuario)
+            
+            print(Fore.GREEN + f"\n✅ Proceso de hurto registrado. El equipo {equipo.placa} está pendiente de devolución.")
+            print(Fore.CYAN + "Un administrador deberá gestionar la confirmación final de la devolución.")
+
+        else:
+            mostrar_encabezado("Resumen de la Devolución", color=Fore.CYAN)
+            print(f"  {'Equipo (Placa):'.ljust(25)} {equipo.placa}")
+            print(f"  {'Se retirará de:'.ljust(25)} {equipo.asignado_a or 'N/A'}")
+            print(f"  {'Estado anterior:'.ljust(25)} {equipo.estado}")
+            print(f"  {'Nuevo estado:'.ljust(25)} {Fore.GREEN}Disponible{Style.RESET_ALL}")
+            print(f"  {'Motivo:'.ljust(25)} {datos_devolucion['Motivo de la Devolución']}")
+            print(f"  {'Observación:'.ljust(25)} {datos_devolucion['Observación de la Devolución']}")
+            print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+            if not confirmar_con_placa(equipo.placa):
+                return
+
+            detalles_log = f"Devuelto por {equipo.asignado_a or 'N/A'}. Motivo: {datos_devolucion['Motivo de la Devolución']}. Obs: {datos_devolucion['Observación de la Devolución']}"
+            
+            equipo.estado = "Disponible"
+            equipo.asignado_a = None
+            equipo.email_asignado = None
+            equipo.fecha_devolucion_prestamo = None
+            
+            db_manager.update_equipo(equipo)
+            registrar_movimiento_inventario(equipo.placa, "Devolución a Inventario", detalles_log, usuario)
+            print(Fore.GREEN + f"\n✅ ¡Devolución confirmada! Equipo {equipo.placa} ahora está 'Disponible'.")
 
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación cancelada.")
@@ -959,23 +1036,43 @@ def editar_equipo(usuario: str, equipo: Equipo):
     finally:
         pausar_pantalla()
 
+
 @requiere_permiso("gestionar_equipo")
 def registrar_renovacion(usuario: str, equipo_actual: Equipo) -> bool:
     """Inicia y procesa la renovación de un equipo por uno nuevo."""
     try:
+        # --- INICIO DE LA MODIFICACIÓN ---
+        # 1. Verificar si hay equipos disponibles para la renovación
+        equipos_nuevos = db_manager.get_new_equipos()
+        equipos_disponibles = db_manager.get_available_not_new_equipos()
+
+        if not equipos_nuevos and not equipos_disponibles:
+            print(Fore.YELLOW + "\n⚠️ No hay equipos disponibles en el inventario para realizar una renovación.")
+            
+            while True:
+                ir_a_registrar = input(Fore.CYAN + "¿Desea registrar un nuevo equipo ahora? (S/N): " + Style.RESET_ALL).strip().upper()
+                if ir_a_registrar == 'S':
+                    registrar_equipo(usuario)
+                    # Después de registrar, es posible que el usuario quiera reintentar la renovación.
+                    # Salimos de la función actual para que pueda volver a intentarlo desde el menú de gestión.
+                    return False 
+                elif ir_a_registrar == 'N':
+                    return False
+                else:
+                    print(Fore.RED + "Opción no válida. Por favor, ingrese S o N.")
+        # --- FIN DE LA MODIFICACIÓN ---
+
         os.system('cls' if os.name == 'nt' else 'clear')
         mostrar_encabezado("Proceso de Renovación de Equipo", color=Fore.YELLOW)
         
         print(Fore.CYAN + "💡 Este proceso requiere que el nuevo equipo ya esté registrado en el sistema.")
         
         # Mostrar equipos disponibles
-        equipos_nuevos = db_manager.get_new_equipos()
         if equipos_nuevos:
             print(Fore.GREEN + "\n--- Equipos Nuevos (sin gestión) ---" + Style.RESET_ALL)
             for equipo in equipos_nuevos:
                 print(f"  - Placa: {equipo['placa']}, Tipo: {equipo['tipo']}, Marca: {equipo['marca']}")
         
-        equipos_disponibles = db_manager.get_available_not_new_equipos()
         if equipos_disponibles:
             print(Fore.CYAN + "\n--- Equipos Disponibles (con historial) ---" + Style.RESET_ALL)
             for equipo in equipos_disponibles:
@@ -996,7 +1093,6 @@ def registrar_renovacion(usuario: str, equipo_actual: Equipo) -> bool:
                 print(Fore.RED + f"El equipo '{placa_nuevo_equipo}' no está 'Disponible' (Estado actual: {equipo_nuevo_data['estado']}).")
                 continue
             
-            # Verificación si el equipo es nuevo (solo 1 movimiento)
             num_movimientos = db_manager.count_movimientos_by_placa(placa_nuevo_equipo)
             if num_movimientos > 1:
                 print(Fore.YELLOW + f"⚠️  ADVERTENCIA: El equipo '{placa_nuevo_equipo}' no es nuevo (tiene {num_movimientos} movimientos).")
@@ -1059,15 +1155,12 @@ def registrar_renovacion(usuario: str, equipo_actual: Equipo) -> bool:
             print(Fore.RED + "\n❌ Las placas no coinciden. Operación cancelada.")
             return False
 
-        # Ambos equipos se bloquean en estado "Renovación"
-        # Actualizar equipo actual (el que se devuelve)
         equipo_actual.estado = "Renovación"
         equipo_actual.fecha_entrega_renovacion = fecha_max_entrega_str
         equipo_actual.renovacion_placa_asociada = equipo_nuevo.placa
         db_manager.update_equipo(equipo_actual)
         registrar_movimiento_inventario(equipo_actual.placa, "Inicio Renovación", f"Reemplazado por {equipo_nuevo.placa}. Obs: {observaciones}", usuario)
 
-        # Actualizar equipo nuevo (el que se asignará)
         equipo_nuevo.estado = "Renovación"
         equipo_nuevo.renovacion_placa_asociada = equipo_actual.placa
         db_manager.update_equipo(equipo_nuevo)
@@ -1081,6 +1174,7 @@ def registrar_renovacion(usuario: str, equipo_actual: Equipo) -> bool:
         return False
     finally:
         pausar_pantalla()
+        
 
 def _mostrar_formulario_mantenimiento(equipo: Equipo, campos: List[str], datos: Dict[str, str], indice_actual: int):
     """
@@ -1201,6 +1295,7 @@ def registrar_devolucion_a_proveedor(usuario: str, equipo: Equipo):
     campos_requeridos = ["Motivo de la Devolución", "Fecha de devolución a proveedor", "Observaciones adicionales"]
     datos_devolucion = {campo: "" for campo in campos_requeridos}
     indice_actual = 0
+    motivo_seleccionado = ""
 
     try:
         while indice_actual < len(campos_requeridos):
@@ -1208,13 +1303,27 @@ def registrar_devolucion_a_proveedor(usuario: str, equipo: Equipo):
             _mostrar_formulario_devolucion(equipo, campos_requeridos, datos_devolucion, indice_actual)
 
             if campo_actual == "Motivo de la Devolución":
-                motivos = ["Ya no se requiere", "Por daño", "Por hurto"]
-                motivo = seleccionar_parametro(None, "Motivo de la Devolución", lista_opciones=motivos)
-                if not motivo: continue
-                datos_devolucion[campo_actual] = motivo
+                # --- MODIFICACIÓN: Añadida la opción "Otro" ---
+                motivos = ["Ya no se requiere", "Por daño", "Por hurto", "Otro"]
+                seleccion = seleccionar_parametro(None, "Motivo de la Devolución", lista_opciones=motivos)
+                if not seleccion: continue
+                
+                motivo_seleccionado = seleccion
+                if seleccion == "Otro":
+                    motivo_personalizado = input(Fore.YELLOW + "Especifique el motivo: " + Style.RESET_ALL).strip()
+                    if not motivo_personalizado:
+                        print(Fore.RED + "El motivo no puede estar vacío si selecciona 'Otro'.")
+                        pausar_pantalla()
+                        continue
+                    datos_devolucion[campo_actual] = motivo_personalizado
+                else:
+                    datos_devolucion[campo_actual] = seleccion
             
             elif campo_actual == "Fecha de devolución a proveedor":
-                fecha_str = input(Fore.YELLOW + "¿Cuándo se entregó/entregará al proveedor? (DD/MM/AAAA): " + Style.RESET_ALL).strip()
+                # --- MODIFICACIÓN: Lógica de pregunta contextual ---
+                prompt_fecha = "¿Cuándo se notificó/notificará al proveedor? (DD/MM/AAAA): " if motivo_seleccionado == "Por hurto" else "¿Cuándo se entregó/entregará al proveedor? (DD/MM/AAAA): "
+                
+                fecha_str = input(Fore.YELLOW + prompt_fecha + Style.RESET_ALL).strip()
                 fecha_dt = validar_formato_fecha(fecha_str)
 
                 if not fecha_dt:
@@ -1223,7 +1332,6 @@ def registrar_devolucion_a_proveedor(usuario: str, equipo: Equipo):
                     continue
 
                 hoy = datetime.now()
-                # Comparamos solo la parte de la fecha, ignorando la hora
                 if fecha_dt.date() < hoy.date():
                     print(Fore.YELLOW + "\n⚠️ La fecha ingresada es anterior a hoy.")
                     confirmacion = input("¿Confirma que el equipo YA FUE ENTREGADO al proveedor? (S/N): ").strip().upper()
@@ -1269,8 +1377,8 @@ def registrar_devolucion_a_proveedor(usuario: str, equipo: Equipo):
         equipo.observaciones = datos_devolucion["Observaciones adicionales"]
         
         db_manager.update_equipo(equipo)
-        detalles = f"Motivo: {equipo.motivo_devolucion}. Fecha prog.: {equipo.fecha_devolucion_proveedor}. Obs: {equipo.observaciones}. Estado anterior: {estado_anterior}"
-        registrar_movimiento_inventario(equipo.placa, "Registro Devolución Proveedor", detalles, usuario)
+        detalles_log = f"Motivo: {equipo.motivo_devolucion}. Fecha prog.: {equipo.fecha_devolucion_proveedor}. Obs: {equipo.observaciones}. Estado anterior: {estado_anterior}"
+        registrar_movimiento_inventario(equipo.placa, "Registro Devolución Proveedor", detalles_log, usuario)
         print(Fore.GREEN + f"\n✅ Equipo {equipo.placa} registrado para devolución a proveedor.")
         print(Fore.GREEN + f"\n👨‍💼 Un administrador deberá continuar con la gestión.")
 
@@ -1542,7 +1650,6 @@ def gestionar_mantenimientos(usuario: str):
         pausar_pantalla()
         
 
-# gestion_inventario.py
 def gestionar_devoluciones_proveedor(usuario: str):
     """Flujo mejorado para confirmar o rechazar devoluciones a proveedor."""
     try:
@@ -1580,9 +1687,8 @@ def gestionar_devoluciones_proveedor(usuario: str):
             except (ValueError, IndexError):
                 print(Fore.RED + "❌ Entrada inválida. Ingrese un número.")
                 pausar_pantalla()
-                continue # <-- ESTA ES LA LÍNEA CLAVE QUE FALTABA
+                continue
 
-            # A partir de aquí, el código sabe que equipo_a_gestionar siempre tendrá un valor
             ultimo_movimiento = db_manager.get_last_movimiento_by_placa(equipo_a_gestionar.placa)
 
             mostrar_encabezado(f"Gestionando Devolución: Placa {equipo_a_gestionar.placa}", color=Fore.YELLOW)
@@ -1598,6 +1704,7 @@ def gestionar_devoluciones_proveedor(usuario: str):
                 print(f"  {'Fecha del Evento:'.ljust(25)} {fecha_evento}")
                 print(f"  {'Usuario que Registró:'.ljust(25)} {ultimo_movimiento['usuario']}")
                 print(f"  {'Motivo:'.ljust(25)} {equipo_a_gestionar.motivo_devolucion}")
+                print(f"  {'Fecha Programada:'.ljust(25)} {equipo_a_gestionar.fecha_devolucion_proveedor}")
                 print(f"  {'Observaciones:'.ljust(25)} {equipo_a_gestionar.observaciones}")
 
             print(Style.RESET_ALL + "-" * 80)
@@ -1606,6 +1713,20 @@ def gestionar_devoluciones_proveedor(usuario: str):
             accion = input(Fore.YELLOW + "Seleccione una acción: " + Style.RESET_ALL).strip()
 
             if accion == '1': # Confirmar Devolución
+                # --- INICIO DE LA MODIFICACIÓN ---
+                print(Fore.CYAN + f"\nLa fecha actual de devolución es: {equipo_a_gestionar.fecha_devolucion_proveedor}")
+                modificar_fecha = input(Fore.YELLOW + "¿Desea modificar esta fecha? (S/N): " + Style.RESET_ALL).strip().upper()
+                if modificar_fecha == 'S':
+                    while True:
+                        nueva_fecha_str = input(Fore.YELLOW + "Ingrese la nueva fecha de devolución (DD/MM/AAAA): " + Style.RESET_ALL).strip()
+                        if validar_formato_fecha(nueva_fecha_str):
+                            equipo_a_gestionar.fecha_devolucion_proveedor = nueva_fecha_str
+                            print(Fore.GREEN + f"Fecha actualizada a: {nueva_fecha_str}")
+                            break
+                        else:
+                            print(Fore.RED + "Formato de fecha inválido.")
+                # --- FIN DE LA MODIFICACIÓN ---
+                
                 observacion = input(Fore.YELLOW + "Observaciones de la confirmación (ej: nro. de guía): " + Style.RESET_ALL).strip()
                 if not observacion:
                     print(Fore.RED + "La observación es obligatoria."); continue
@@ -1645,7 +1766,7 @@ def gestionar_devoluciones_proveedor(usuario: str):
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Regresando al menú anterior.")
         pausar_pantalla()
-            
+        
 # gestion_inventario.py
 @requiere_permiso("gestionar_pendientes")
 def gestionar_renovaciones(usuario: str):
