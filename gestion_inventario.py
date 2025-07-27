@@ -1601,3 +1601,102 @@ def gestionar_renovaciones(usuario: str):
             print(Fore.RED + "❌ Entrada inválida.")
         finally:
             pausar_pantalla()
+            
+            
+            
+def _mostrar_resultados_busqueda(usuario: str, resultados: List[Dict]):
+    """Muestra los resultados de una búsqueda de forma paginada."""
+    if not resultados:
+        print(Fore.YELLOW + "\nNo se encontraron equipos que coincidan con los criterios de búsqueda.")
+        pausar_pantalla()
+        return
+
+    page = 1
+    page_size = 15
+    total_pages = (len(resultados) + page_size - 1) // page_size
+
+    while True:
+        mostrar_encabezado("Resultados de la Búsqueda")
+        
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        pagina_resultados = resultados[start_index:end_index]
+
+        print(f"{Fore.CYAN}{'#':<4} {'PLACA':<15} {'TIPO':<20} {'ESTADO':<25} {'ASIGNADO A'}{Style.RESET_ALL}")
+        print(Fore.CYAN + "="*90 + Style.RESET_ALL)
+
+        for i, equipo in enumerate(pagina_resultados, start=start_index + 1):
+            estado_color = Fore.WHITE
+            if equipo['estado'] == "Disponible": estado_color = Fore.GREEN
+            elif equipo['estado'] in ["Asignado", "En préstamo"]: estado_color = Fore.YELLOW
+            else: estado_color = Fore.MAGENTA
+
+            asignado_a = equipo.get('asignado_a') or 'N/A'
+            print(f"{i:<4} {equipo['placa']:<15} {equipo['tipo']:<20} {estado_color}{equipo['estado']:<25}{Style.RESET_ALL} {asignado_a}")
+        
+        print("\n" + Fore.WHITE + f"Página {page} de {total_pages} ({len(resultados)} resultados totales)" + Style.RESET_ALL)
+        
+        prompt = (f"{Fore.CYAN}Presione (s) siguiente, (a) anterior, (g) para gestionar un equipo, (x) para volver: {Style.RESET_ALL}")
+        opcion = input(prompt).strip().lower()
+
+        if opcion == 's' and page < total_pages:
+            page += 1
+        elif opcion == 'a' and page > 1:
+            page -= 1
+        elif opcion == 'g':
+            try:
+                num_equipo = int(input(Fore.YELLOW + "Ingrese el número (#) del equipo que desea gestionar: " + Style.RESET_ALL))
+                if 1 <= num_equipo <= len(resultados):
+                    equipo_seleccionado = Equipo(**resultados[num_equipo - 1])
+                    menu_gestion_especifica(usuario, equipo_seleccionado)
+                else:
+                    print(Fore.RED + "Número fuera de rango.")
+                    pausar_pantalla()
+            except ValueError:
+                print(Fore.RED + "Entrada no válida. Debe ser un número.")
+                pausar_pantalla()
+        elif opcion == 'x':
+            break
+
+
+@requiere_permiso("ver_inventario")
+def menu_busqueda_avanzada(usuario: str):
+    """Menú para realizar búsquedas avanzadas de equipos."""
+    while True:
+        opciones = [
+            "Buscar por Placa",
+            "Buscar por Estado",
+            "Buscar por Persona Asignada",
+            "Buscar por Tipo de Equipo",
+            "Buscar por Marca",
+            "Volver al Menú de Gestión"
+        ]
+        mostrar_menu(opciones, titulo="Búsqueda Avanzada de Equipos")
+        
+        opcion = input(Fore.YELLOW + "Seleccione un criterio de búsqueda (o 'x' para volver): " + Style.RESET_ALL).strip()
+
+        if opcion.lower() == 'x' or opcion == '6':
+            break
+        
+        criterios_map = {
+            '1': ('placa', 'la placa'),
+            '2': ('estado', 'el estado'),
+            '3': ('asignado_a', 'la persona asignada'),
+            '4': ('tipo', 'el tipo de equipo'),
+            '5': ('marca', 'la marca')
+        }
+
+        if opcion in criterios_map:
+            campo_db, nombre_campo = criterios_map[opcion]
+            valor_busqueda = input(Fore.YELLOW + f"Ingrese {nombre_campo} a buscar: " + Style.RESET_ALL).strip()
+            
+            if valor_busqueda:
+                filtros = {campo_db: valor_busqueda}
+                resultados = db_manager.buscar_equipos(filtros)
+                _mostrar_resultados_busqueda(usuario, resultados)
+            else:
+                print(Fore.RED + "El término de búsqueda no puede estar vacío.")
+                pausar_pantalla()
+        else:
+            print(Fore.RED + "Opción no válida.")
+            pausar_pantalla()            

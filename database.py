@@ -94,7 +94,7 @@ class DatabaseManager:
                 placa TEXT PRIMARY KEY, tipo TEXT NOT NULL, marca TEXT NOT NULL,
                 modelo TEXT NOT NULL, serial TEXT NOT NULL, estado TEXT NOT NULL,
                 asignado_a TEXT, email_asignado TEXT, observaciones TEXT,
-                fecha_registro TEXT, fecha_devolucion_prestamo TEXT, 
+                fecha_registro TEXT, fecha_devolucion_prestamo TEXT,
                 fecha_devolucion_proveedor TEXT, motivo_devolucion TEXT,
                 estado_anterior TEXT, renovacion_placa_asociada TEXT,
                 fecha_entrega_renovacion TEXT
@@ -109,14 +109,14 @@ class DatabaseManager:
         ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS log_sistema (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, accion TEXT NOT NULL, 
+                id INTEGER PRIMARY KEY AUTOINCREMENT, accion TEXT NOT NULL,
                 detalles TEXT NOT NULL, usuario TEXT NOT NULL, fecha TEXT NOT NULL
             )
         ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS usuarios (
                 nombre_usuario TEXT PRIMARY KEY, contrasena_hash TEXT NOT NULL,
-                rol TEXT NOT NULL, nombre_completo TEXT, 
+                rol TEXT NOT NULL, nombre_completo TEXT,
                 cambio_clave_requerido INTEGER NOT NULL DEFAULT 1,
                 is_active INTEGER NOT NULL DEFAULT 1
             )
@@ -397,6 +397,28 @@ class DatabaseManager:
     def delete_parametro(self, tipo: str, valor: str):
         self.execute_query('DELETE FROM parametros WHERE tipo = ? AND valor = ?', (tipo, valor))
         self.commit()
+        
+    def buscar_equipos(self, filtros: Dict) -> List[Dict]:
+        """
+        Busca equipos en la base de datos aplicando múltiples filtros.
+        Permite búsquedas parciales (LIKE) en campos de texto.
+        """
+        query = "SELECT * FROM equipos WHERE 1=1"
+        params = []
+
+        for campo, valor in filtros.items():
+            # Asegurarse de que el campo es una columna válida para evitar inyección SQL
+            # Columnas permitidas para la búsqueda
+            columnas_validas = [
+                'placa', 'tipo', 'marca', 'modelo', 'serial', 
+                'estado', 'asignado_a', 'email_asignado'
+            ]
+            if campo in columnas_validas:
+                query += f" AND {campo} LIKE ?"
+                params.append(f"%{valor}%")
+        
+        cursor = self.execute_query(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
 
 db_manager = DatabaseManager("inventario.db")
 

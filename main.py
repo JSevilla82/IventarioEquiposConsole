@@ -10,7 +10,7 @@ from ui import (
 )
 from gestion_inventario import (
     registrar_equipo, gestionar_equipos,
-    menu_gestionar_pendientes
+    menu_gestionar_pendientes, menu_busqueda_avanzada
 )
 from gestion_reportes import (
     menu_ver_inventario, menu_ver_ultimos_movimientos,
@@ -26,17 +26,12 @@ from estadisticas import mostrar_estadisticas
 
 load_dotenv()
 
-# main.py
-
 def menu_gestion_inventario(usuario: str):
     user_data = db_manager.get_user_by_username(usuario)
     rol_actual = user_data['rol']
     
     while True:
-        # --- INICIO DE CORRECCIÓN ---
-        # Se añade esta línea para limpiar la pantalla en cada ciclo del menú.
         mostrar_encabezado("Módulo de Gestión de Inventario")
-        # --- FIN DE CORRECCIÓN ---
 
         opciones_disponibles = []
         
@@ -45,6 +40,9 @@ def menu_gestion_inventario(usuario: str):
         if "gestionar_equipo" in ROLES_PERMISOS[rol_actual]: 
             opciones_disponibles.append("Gestionar Equipos")
         
+        if "ver_inventario" in ROLES_PERMISOS[rol_actual]:
+            opciones_disponibles.append("Búsqueda Avanzada de Equipos")
+
         if "gestionar_pendientes" in ROLES_PERMISOS[rol_actual]:
             equipos = db_manager.get_all_equipos()
             mantenimientos_pendientes = len([e for e in equipos if e.get('estado') == "En mantenimiento"])
@@ -61,14 +59,16 @@ def menu_gestion_inventario(usuario: str):
         
         opciones_disponibles.append("Volver al menú principal")
 
-        # Se utiliza una función que NO limpia la pantalla
-        mostrar_menu([], titulo="") # Título vacío porque ya lo muestra el encabezado
+        mostrar_menu([], titulo="")
         for i, opcion in enumerate(opciones_disponibles, 1):
             print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
         print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
 
-        opcion_input = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+        opcion_input = input(Fore.YELLOW + "Seleccione una opción (o 'x' para volver): " + Style.RESET_ALL).strip()
         
+        if opcion_input.lower() == 'x':
+            break
+            
         try:
             opciones_map = {str(i+1): texto for i, texto in enumerate(opciones_disponibles)}
             opcion_texto = opciones_map.get(opcion_input)
@@ -82,6 +82,8 @@ def menu_gestion_inventario(usuario: str):
                 registrar_equipo(usuario)
             elif "Gestionar Equipos" in opcion_texto:
                 gestionar_equipos(usuario)
+            elif "Búsqueda Avanzada" in opcion_texto:
+                menu_busqueda_avanzada(usuario)
             elif "Gestionar Mantenimientos y Devoluciones" in opcion_texto:
                 menu_gestionar_pendientes(usuario)
             elif "Volver al menú principal" in opcion_texto:
@@ -93,17 +95,12 @@ def menu_gestion_inventario(usuario: str):
         except (ValueError, IndexError):
             print(Fore.RED + "Entrada no válida.")
 
-# main.py
-
 def menu_gestion_acceso_sistema(usuario: str):
     user_data = db_manager.get_user_by_username(usuario)
     rol_actual = user_data['rol']
     
     while True:
-        # --- INICIO DE CORRECCIÓN ---
-        # Se añade esta línea para limpiar la pantalla.
         mostrar_encabezado("Módulo de Acceso y Sistema")
-        # --- FIN DE CORRECCIÓN ---
 
         opciones_disponibles = []
         if "gestionar_usuarios" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestión de usuarios")
@@ -112,14 +109,16 @@ def menu_gestion_acceso_sistema(usuario: str):
         opciones_disponibles.append("Cambiar mi contraseña")
         opciones_disponibles.append("Volver al menú principal")
         
-        # Se utiliza una función que NO limpia la pantalla
-        mostrar_menu([], titulo="") # Título vacío
+        mostrar_menu([], titulo="")
         for i, opcion in enumerate(opciones_disponibles, 1):
             print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
         print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
         
-        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+        opcion = input(Fore.YELLOW + "Seleccione una opción (o 'x' para volver): " + Style.RESET_ALL).strip()
         
+        if opcion.lower() == 'x':
+            break
+
         try:
             opcion_idx = int(opcion) - 1
             if 0 <= opcion_idx < len(opciones_disponibles):
@@ -146,8 +145,6 @@ def menu_accesos_rapidos():
     print(f"  {Fore.YELLOW}rhc{Style.RESET_ALL} - Reporte Histórico Completo (Log)")
     print("\n" + Fore.CYAN + "Escribe estos comandos en el menú principal para ir directamente a la función." + Style.RESET_ALL)
     pausar_pantalla()
-
-# main.py
 
 def menu_principal():
     inicializar_admin_si_no_existe()
@@ -177,10 +174,7 @@ def menu_principal():
     ui.NOMBRE_COMPLETO_USUARIO = user_data.get('nombre_completo', usuario_logueado)
 
     while True:
-        # --- INICIO DE CORRECCIÓN ---
-        # Se añade esta línea para limpiar la pantalla en cada ciclo del menú.
         mostrar_encabezado("Menú Principal")
-        # --- FIN DE CORRECCIÓN ---
         
         opciones_principales = [
             "Estadísticas de Inventario",
@@ -191,13 +185,12 @@ def menu_principal():
             "Salir"
         ]
         
-        # Se utiliza una función que NO limpia la pantalla
-        mostrar_menu([], titulo="") # Título vacío
+        mostrar_menu([], titulo="")
         for i, opcion in enumerate(opciones_principales, 1):
             print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
         print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
         
-        opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido: " + Style.RESET_ALL).strip().lower()
+        opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido (o 'x' para salir): " + Style.RESET_ALL).strip().lower()
         
         shortcuts = {
             'rq': lambda: registrar_equipo(usuario_logueado),
@@ -209,9 +202,11 @@ def menu_principal():
             'rhc': lambda: generar_excel_historico(usuario_logueado),
         }
         
+        if opcion.lower() == 'x':
+            opcion = '6'
+
         if opcion in shortcuts:
             shortcuts[opcion]()
-
         elif opcion == '1':
             mostrar_estadisticas(usuario_logueado)
         elif opcion == '2':
