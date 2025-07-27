@@ -12,7 +12,7 @@ from ui import mostrar_encabezado, mostrar_menu, pausar_pantalla, confirmar_con_
 from gestion_acceso import requiere_permiso
 from gestion_reportes import generar_excel_historico_equipo
 
-# --- INICIO DE LA MODIFICACIÓN ---
+# --- INICIO DE MODIFICACIÓN PARA REGISTRO DE EQUIPO ---
 
 def _mostrar_formulario_interactivo(campos: List[str], datos: Dict[str, str], indice_actual: int):
     """
@@ -24,14 +24,10 @@ def _mostrar_formulario_interactivo(campos: List[str], datos: Dict[str, str], in
     print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
 
     for i, campo in enumerate(campos):
-        # El indicador visual de la flecha
         indicador = Fore.YELLOW + " -> " if i == indice_actual else "    "
-        
-        # El valor ya ingresado
         valor_mostrado = datos.get(campo, "")
         if valor_mostrado:
             valor_mostrado = f"{Fore.GREEN}{valor_mostrado}{Style.RESET_ALL}"
-
         print(f"{indicador}{campo.ljust(20)}: {valor_mostrado}")
 
     print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
@@ -40,8 +36,6 @@ def _mostrar_formulario_interactivo(campos: List[str], datos: Dict[str, str], in
 @requiere_permiso("registrar_equipo")
 def registrar_equipo(usuario: str):
     """Función mejorada para registrar un nuevo equipo con una interfaz interactiva."""
-    
-    # Verificación inicial de parámetros necesarios
     tipos_existentes = db_manager.get_parametros_por_tipo('tipo_equipo', solo_activos=True)
     marcas_existentes = db_manager.get_parametros_por_tipo('marca_equipo', solo_activos=True)
 
@@ -54,10 +48,8 @@ def registrar_equipo(usuario: str):
         pausar_pantalla()
         return
 
-    # Definición de los campos y almacenamiento de datos
     campos_requeridos = ["Placa", "Tipo de Equipo", "Marca", "Modelo", "Número de serie", "Observaciones"]
     datos_equipo = {campo: "" for campo in campos_requeridos}
-    
     indice_actual = 0
     
     try:
@@ -65,18 +57,15 @@ def registrar_equipo(usuario: str):
             campo_actual = campos_requeridos[indice_actual]
             _mostrar_formulario_interactivo(campos_requeridos, datos_equipo, indice_actual)
 
-            # Lógica de entrada de datos para cada campo
             if campo_actual == "Placa":
                 placa = input(Fore.YELLOW + "Ingrese la Placa del equipo: " + Style.RESET_ALL).strip().upper()
                 if not validar_placa_formato(placa):
                     print(Fore.RED + "⚠️ Formato de placa inválido (mín. 4 caracteres alfanuméricos).")
                     pausar_pantalla()
                     continue
-                
                 equipo_existente = db_manager.get_equipo_by_placa(placa)
                 if equipo_existente:
                     if equipo_existente['estado'] == "Devuelto a Proveedor":
-                        # Lógica de reactivación
                         print(Fore.YELLOW + f"\n⚠️ Este equipo (Placa: {placa}) ya existe y fue devuelto al proveedor.")
                         confirmacion = input(Fore.YELLOW + "¿Desea reactivarlo? (S/N): " + Style.RESET_ALL).strip().upper()
                         if confirmacion == 'S':
@@ -87,7 +76,7 @@ def registrar_equipo(usuario: str):
                             registrar_movimiento_inventario(placa, "Reactivación", "Equipo reactivado en el inventario.", usuario)
                             print(Fore.GREEN + f"\n✅ ¡Equipo {placa} reactivado!")
                             pausar_pantalla()
-                            return # Termina la función de registro
+                            return
                         else:
                             print(Fore.YELLOW + "Reactivación cancelada. Intente con otra placa.")
                             pausar_pantalla()
@@ -97,17 +86,14 @@ def registrar_equipo(usuario: str):
                         pausar_pantalla()
                         continue
                 datos_equipo[campo_actual] = placa
-
             elif campo_actual == "Tipo de Equipo":
                 tipo = seleccionar_parametro('tipo_equipo', 'Tipo de Equipo')
-                if not tipo: continue # Si el usuario cancela la selección
+                if not tipo: continue
                 datos_equipo[campo_actual] = tipo
-
             elif campo_actual == "Marca":
                 marca = seleccionar_parametro('marca_equipo', 'Marca')
                 if not marca: continue
                 datos_equipo[campo_actual] = marca
-
             elif campo_actual == "Modelo":
                 modelo = input(Fore.YELLOW + "Ingrese el Modelo: " + Style.RESET_ALL).strip()
                 if not validar_campo_general(modelo):
@@ -115,7 +101,6 @@ def registrar_equipo(usuario: str):
                     pausar_pantalla()
                     continue
                 datos_equipo[campo_actual] = modelo
-
             elif campo_actual == "Número de serie":
                 serial = input(Fore.YELLOW + "Ingrese el Número de serie: " + Style.RESET_ALL).strip()
                 if not validar_serial(serial):
@@ -123,15 +108,11 @@ def registrar_equipo(usuario: str):
                     pausar_pantalla()
                     continue
                 datos_equipo[campo_actual] = serial
-
             elif campo_actual == "Observaciones":
                 observaciones = input(Fore.YELLOW + "Ingrese Observaciones (opcional): " + Style.RESET_ALL).strip() or "Ninguna"
                 datos_equipo[campo_actual] = observaciones
-            
-            # Avanzar al siguiente campo
             indice_actual += 1
 
-        # Resumen final y confirmación
         mostrar_encabezado("Resumen del Nuevo Equipo", color=Fore.CYAN)
         for campo, valor in datos_equipo.items():
             print(f"  {campo.ljust(20)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
@@ -140,30 +121,177 @@ def registrar_equipo(usuario: str):
         if not confirmar_con_placa(datos_equipo["Placa"]):
              return
 
-        # Creación y guardado del equipo
         nuevo_equipo = Equipo(
-            placa=datos_equipo["Placa"],
-            tipo=datos_equipo["Tipo de Equipo"],
-            marca=datos_equipo["Marca"],
-            modelo=datos_equipo["Modelo"],
-            serial=datos_equipo["Número de serie"],
-            observaciones=datos_equipo["Observaciones"]
+            placa=datos_equipo["Placa"], tipo=datos_equipo["Tipo de Equipo"], marca=datos_equipo["Marca"],
+            modelo=datos_equipo["Modelo"], serial=datos_equipo["Número de serie"], observaciones=datos_equipo["Observaciones"]
         )
         db_manager.insert_equipo(nuevo_equipo)
         registrar_movimiento_inventario(
-            nuevo_equipo.placa, 
-            "Registro", 
-            f"Nuevo equipo registrado: {nuevo_equipo.tipo} {nuevo_equipo.marca} {nuevo_equipo.modelo}", 
-            usuario
+            nuevo_equipo.placa, "Registro", f"Nuevo equipo registrado: {nuevo_equipo.tipo} {nuevo_equipo.marca} {nuevo_equipo.modelo}", usuario
         )
         print(Fore.GREEN + f"\n✅ ¡Equipo con placa {nuevo_equipo.placa} registrado exitosamente!")
-
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación de registro cancelada.")
     finally:
         pausar_pantalla()
 
-# --- FIN DE LA MODIFICACIÓN ---
+# --- FIN DE MODIFICACIÓN PARA REGISTRO DE EQUIPO ---
+
+# --- INICIO DE MODIFICACIÓN PARA ASIGNACIÓN DE EQUIPO ---
+
+def _mostrar_formulario_asignacion(equipo: Equipo, campos: List[str], datos: Dict[str, str], indice_actual: int):
+    """
+    Muestra el formulario interactivo para asignar o prestar un equipo,
+    incluyendo la información del equipo que se está gestionando.
+    """
+    mostrar_encabezado(f"Asignar/Prestar Equipo - Placa: {equipo.placa}", color=Fore.BLUE)
+    
+    # Mostrar información del equipo que se está gestionando
+    print(Fore.CYAN + "--- Información del Equipo ---")
+    print(f"  {'Placa:'.ljust(15)} {equipo.placa}")
+    print(f"  {'Tipo:'.ljust(15)} {equipo.tipo}")
+    print(f"  {'Marca:'.ljust(15)} {equipo.marca}")
+    print(f"  {'Modelo:'.ljust(15)} {equipo.modelo}")
+    print(Style.RESET_ALL)
+    
+    print(Fore.CYAN + "💡 Complete los siguientes campos. Puede presionar Ctrl+C para cancelar." + Style.RESET_ALL)
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+    for i, campo in enumerate(campos):
+        indicador = Fore.YELLOW + " -> " if i == indice_actual else "    "
+        valor_mostrado = datos.get(campo, "")
+        if valor_mostrado:
+            valor_mostrado = f"{Fore.GREEN}{valor_mostrado}{Style.RESET_ALL}"
+        print(f"{indicador}{campo.ljust(25)}: {valor_mostrado}")
+
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+@requiere_permiso("gestionar_equipo")
+def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
+    """Función mejorada para asignar o prestar un equipo con una interfaz interactiva."""
+    if equipo.estado != "Disponible":
+        print(Fore.RED + f"❌ El equipo no está 'Disponible' (Estado actual: {equipo.estado}).")
+        pausar_pantalla()
+        return
+    
+    dominios_permitidos = db_manager.get_parametros_por_tipo('dominio_correo', solo_activos=True)
+    if not dominios_permitidos:
+        print(Fore.RED + "❌ No se puede asignar un equipo. No hay 'Dominios de Correo' configurados.")
+        pausar_pantalla()
+        return
+
+    campos_base = ["Tipo de Operación", "Nombre de la Persona", "Email de la Persona", "Observación"]
+    datos_asignacion = {campo: "" for campo in campos_base}
+    indice_actual = 0
+
+    try:
+        while indice_actual < len(campos_base):
+            campos_actuales = list(datos_asignacion.keys())
+            campo_actual = campos_actuales[indice_actual]
+            # Pasamos el objeto 'equipo' a la función de visualización
+            _mostrar_formulario_asignacion(equipo, campos_actuales, datos_asignacion, indice_actual)
+
+            if campo_actual == "Tipo de Operación":
+                print(Fore.GREEN + "\nSeleccione el tipo de operación:")
+                print("1. Asignar")
+                print("2. Prestar")
+                tipo_input = input(Fore.YELLOW + "Opción: " + Style.RESET_ALL).strip()
+                if tipo_input == "1":
+                    datos_asignacion[campo_actual] = "Asignación"
+                    if "Fecha de Devolución" in datos_asignacion:
+                        del datos_asignacion["Fecha de Devolución"]
+                        campos_base.remove("Fecha de Devolución")
+                elif tipo_input == "2":
+                    datos_asignacion[campo_actual] = "Préstamo"
+                    if "Fecha de Devolución" not in datos_asignacion:
+                        # Insertamos el campo en la posición correcta para el flujo
+                        datos_asignacion["Fecha de Devolución"] = ""
+                        campos_base.insert(4, "Fecha de Devolución")
+                else:
+                    print(Fore.RED + "Opción inválida.")
+                    pausar_pantalla()
+                    continue
+            
+            elif campo_actual == "Nombre de la Persona":
+                nombre_input = input(Fore.YELLOW + "Ingrese el Nombre y Apellido: " + Style.RESET_ALL).strip()
+                nombre_asignado = formatear_y_validar_nombre(nombre_input)
+                if not nombre_asignado:
+                    print(Fore.RED + "Nombre inválido. Debe contener al menos nombre y apellido.")
+                    pausar_pantalla()
+                    continue
+                datos_asignacion[campo_actual] = nombre_asignado
+
+            elif campo_actual == "Email de la Persona":
+                email_asignado = input(Fore.YELLOW + "Ingrese el Email: " + Style.RESET_ALL).strip().lower()
+                if not validar_email(email_asignado):
+                    print(Fore.RED + "Formato de email inválido.")
+                    pausar_pantalla()
+                    continue
+                try:
+                    dominio_email = email_asignado.split('@')[1]
+                    dominios_activos = [d['valor'] for d in dominios_permitidos]
+                    if dominio_email not in dominios_activos:
+                        print(Fore.RED + f"❌ Dominio '{dominio_email}' no permitido.")
+                        print(Fore.CYAN + "Dominios permitidos: " + ", ".join(dominios_activos))
+                        pausar_pantalla()
+                        continue
+                except IndexError:
+                    print(Fore.RED + "Formato de email inválido.")
+                    pausar_pantalla()
+                    continue
+                datos_asignacion[campo_actual] = email_asignado
+
+            elif campo_actual == "Observación":
+                observacion = input(Fore.YELLOW + "Ingrese una Observación (obligatoria): " + Style.RESET_ALL).strip()
+                if not observacion:
+                    print(Fore.RED + "La observación es obligatoria.")
+                    pausar_pantalla()
+                    continue
+                datos_asignacion[campo_actual] = observacion
+
+            elif campo_actual == "Fecha de Devolución":
+                fecha_str = input(Fore.YELLOW + "Ingrese la Fecha de Devolución (DD/MM/AAAA): " + Style.RESET_ALL).strip()
+                fecha_dt = validar_formato_fecha(fecha_str)
+                if not fecha_dt or fecha_dt.date() <= datetime.now().date():
+                    print(Fore.RED + "Fecha inválida o no es posterior a la fecha actual.")
+                    pausar_pantalla()
+                    continue
+                datos_asignacion[campo_actual] = fecha_str
+            
+            indice_actual += 1
+
+        # Resumen final y confirmación
+        mostrar_encabezado("Resumen de la Operación", color=Fore.CYAN)
+        for campo, valor in datos_asignacion.items():
+            print(f"  {campo.ljust(25)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
+        print(f"  {'Equipo (Placa):'.ljust(25)}: {Fore.GREEN}{equipo.placa}{Style.RESET_ALL}")
+        print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+        if not confirmar_con_placa(equipo.placa):
+            return
+
+        # Actualización del equipo y registro del log
+        es_prestamo = datos_asignacion["Tipo de Operación"] == "Préstamo"
+        equipo.estado = "En préstamo" if es_prestamo else "Asignado"
+        equipo.asignado_a = datos_asignacion["Nombre de la Persona"]
+        equipo.email_asignado = datos_asignacion["Email de la Persona"]
+        equipo.fecha_devolucion_prestamo = datos_asignacion.get("Fecha de Devolución")
+        
+        detalles_log = f"{datos_asignacion['Tipo de Operación']} a {equipo.asignado_a}. Obs: {datos_asignacion['Observación']}"
+        if es_prestamo:
+            detalles_log += f". Devolución: {equipo.fecha_devolucion_prestamo}"
+
+        db_manager.update_equipo(equipo)
+        registrar_movimiento_inventario(equipo.placa, datos_asignacion["Tipo de Operación"], detalles_log, usuario)
+        print(Fore.GREEN + f"\n✅ ¡Operación confirmada! Equipo {equipo.placa} ahora está '{equipo.estado}'.")
+
+    except KeyboardInterrupt:
+        print(Fore.CYAN + "\n🚫 Operación cancelada.")
+    finally:
+        pausar_pantalla()
+
+# --- FIN DE MODIFICACIÓN PARA ASIGNACIÓN DE EQUIPO ---
+
 
 # --- FUNCIONES DE UTILIDAD Y VALIDACIÓN (Sin cambios) ---
 def validar_placa_unica(placa: str) -> bool:
@@ -504,108 +632,6 @@ def mostrar_detalles_equipo(equipo: Equipo):
 
     pausar_pantalla()
 
-@requiere_permiso("gestionar_equipo")
-def asignar_o_prestar_equipo(usuario: str, equipo: Equipo):
-    if equipo.estado != "Disponible":
-        print(Fore.RED + f"❌ El equipo no está 'Disponible' (Estado actual: {equipo.estado}).")
-        pausar_pantalla()
-        return
-    
-    dominios_permitidos = db_manager.get_parametros_por_tipo('dominio_correo', solo_activos=True)
-    if not dominios_permitidos:
-        print(Fore.RED + "❌ No se puede asignar un equipo.")
-        print(Fore.YELLOW + "   - No hay 'Dominios de Correo' activos configurados en el sistema.")
-        print(Fore.CYAN + "   Por favor, pida a un Administrador que configure este parámetro.")
-        pausar_pantalla()
-        return
-
-    try:
-        print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
-        while True:
-            mostrar_menu(["Asignar", "Prestar"], titulo="Seleccione el tipo de operación")
-            tipo_asignacion_input = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
-            if tipo_asignacion_input in ["1", "2"]:
-                break
-            print(Fore.RED + "Opción inválida. Intente de nuevo.")
-        
-        es_prestamo = tipo_asignacion_input == "2"
-        tipo_movimiento = "Préstamo" if es_prestamo else "Asignación"
-
-        while True:
-            nombre_input = input(Fore.YELLOW + "Nombre de la persona: " + Style.RESET_ALL).strip()
-            nombre_asignado = formatear_y_validar_nombre(nombre_input)
-            if nombre_asignado:
-                break
-            print(Fore.RED + "Nombre inválido. Debe contener al menos nombre y apellido (ej: Juan Pérez).")
-
-        while True:
-            email_asignado = input(Fore.YELLOW + "Email de la persona: " + Style.RESET_ALL).strip().lower()
-            if not validar_email(email_asignado):
-                print(Fore.RED + "Formato de email inválido. Intente de nuevo.")
-                continue
-            
-            try:
-                dominio_email = email_asignado.split('@')[1]
-                dominios_activos_lista = [d['valor'] for d in dominios_permitidos]
-
-                if dominio_email in dominios_activos_lista:
-                    break
-                else:
-                    print(Fore.RED + f"❌ Dominio '{dominio_email}' no está permitido.")
-                    print(Fore.CYAN + "Dominios activos permitidos: " + ", ".join(dominios_activos_lista))
-            except IndexError:
-                print(Fore.RED + "Formato de email inválido. Intente de nuevo.")
-
-        while True:
-            observacion_asignacion = input(Fore.YELLOW + f"Observación de la {tipo_movimiento.lower()}: " + Style.RESET_ALL).strip()
-            if observacion_asignacion:
-                break
-            print(Fore.RED + "La observación es obligatoria. Intente de nuevo.")
-
-        fecha_devolucion = None
-        if es_prestamo:
-            while True:
-                fecha_str = input(Fore.YELLOW + "Fecha para la devolución de este equipo (DD/MM/AAAA): " + Style.RESET_ALL).strip()
-                fecha_dt = validar_formato_fecha(fecha_str)
-                if fecha_dt:
-                    if fecha_dt.date() > datetime.now().date():
-                        fecha_devolucion = fecha_str
-                        break
-                    else:
-                        print(Fore.RED + "La fecha de devolución debe ser posterior a la fecha actual.")
-                else:
-                    print(Fore.RED + "Formato de fecha inválido. Intente de nuevo.")
-        
-        print("\n" + Fore.CYAN + "--- Resumen de la Operación ---")
-        print(f"  {'Acción:'.ljust(20)} {tipo_movimiento}")
-        print(f"  {'Equipo (Placa):'.ljust(20)} {equipo.placa}")
-        print(f"  {'Asignado a:'.ljust(20)} {nombre_asignado}")
-        print(f"  {'Email:'.ljust(20)} {email_asignado}")
-        if fecha_devolucion:
-            print(f"  {'Fecha de Devolución:'.ljust(20)} {fecha_devolucion}")
-        print(f"  {'Observación:'.ljust(20)} {observacion_asignacion}")
-        print("--------------------------------" + Style.RESET_ALL)
-        
-        if not confirmar_con_placa(equipo.placa):
-            return
-
-        equipo.estado = "En préstamo" if es_prestamo else "Asignado"
-        detalles_movimiento = f"{tipo_movimiento} a {nombre_asignado}. Obs: {observacion_asignacion}"
-        if fecha_devolucion:
-            detalles_movimiento += f". Devolución: {fecha_devolucion}"
-        
-        equipo.asignado_a = nombre_asignado
-        equipo.email_asignado = email_asignado
-        equipo.fecha_devolucion_prestamo = fecha_devolucion
-
-        db_manager.update_equipo(equipo)
-        registrar_movimiento_inventario(equipo.placa, tipo_movimiento, detalles_movimiento, usuario)
-        print(Fore.GREEN + f"\n✅ ¡Operación confirmada! Equipo {equipo.placa} ahora está '{equipo.estado}'.")
-
-    except KeyboardInterrupt:
-        print(Fore.CYAN + "\n🚫 Operación cancelada.")
-    finally:
-        pausar_pantalla()
 
 @requiere_permiso("gestionar_equipo")
 def devolver_equipo(usuario: str, equipo: Equipo):
@@ -886,36 +912,87 @@ def menu_gestionar_pendientes(usuario: str):
             print(Fore.RED + "Opción no válida.")
             pausar_pantalla()
         
+
+
+        
+def _mostrar_formulario_mantenimiento(equipo: Equipo, campos: List[str], datos: Dict[str, str], indice_actual: int):
+    """
+    Muestra el formulario interactivo para registrar un mantenimiento,
+    incluyendo la información del equipo que se está gestionando.
+    """
+    mostrar_encabezado(f"Registrar Mantenimiento - Placa: {equipo.placa}", color=Fore.BLUE)
+    
+    # Mostrar información del equipo
+    print(Fore.CYAN + "--- Información del Equipo ---")
+    print(f"  {'Placa:'.ljust(15)} {equipo.placa}")
+    print(f"  {'Tipo:'.ljust(15)} {equipo.tipo}")
+    print(f"  {'Marca:'.ljust(15)} {equipo.marca}")
+    print(f"  {'Modelo:'.ljust(15)} {equipo.modelo}")
+    print(Style.RESET_ALL)
+    
+    print(Fore.CYAN + "💡 Complete los siguientes campos. Puede presionar Ctrl+C para cancelar." + Style.RESET_ALL)
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+    for i, campo in enumerate(campos):
+        indicador = Fore.YELLOW + " -> " if i == indice_actual else "    "
+        valor_mostrado = datos.get(campo, "")
+        if valor_mostrado:
+            valor_mostrado = f"{Fore.GREEN}{valor_mostrado}{Style.RESET_ALL}"
+        print(f"{indicador}{campo.ljust(25)}: {valor_mostrado}")
+
+    print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
+
+
 @requiere_permiso("gestionar_equipo")
 def registrar_mantenimiento(usuario: str, equipo: Equipo):
-    try:
-        print(Fore.CYAN + "💡 Puede presionar Ctrl+C en cualquier momento para cancelar." + Style.RESET_ALL)
-        
-        tipos_mantenimiento = ["Preventivo", "Correctivo", "Mejora"]
-        tipo_seleccionado = seleccionar_parametro(None, "Tipo de Mantenimiento", lista_opciones=tipos_mantenimiento)
-        
-        while True:
-            observaciones_mantenimiento = input(Fore.YELLOW + "Observaciones del mantenimiento: " + Style.RESET_ALL).strip()
-            if observaciones_mantenimiento:
-                break
-            print(Fore.RED + "Las observaciones son obligatorias.")
+    """Función mejorada para registrar un mantenimiento con una interfaz interactiva."""
+    
+    campos_requeridos = ["Tipo de Mantenimiento", "Observaciones"]
+    datos_mantenimiento = {campo: "" for campo in campos_requeridos}
+    indice_actual = 0
 
-        print("\n" + Fore.CYAN + "--- Resumen del Mantenimiento ---")
-        print(f"  {'Equipo (Placa):'.ljust(25)} {equipo.placa}")
-        print(f"  {'Tipo de Mantenimiento:'.ljust(25)} {tipo_seleccionado}")
-        print(f"  {'Observaciones:'.ljust(25)} {observaciones_mantenimiento}")
-        print(f"  {'Nuevo estado:'.ljust(25)} En mantenimiento")
-        print("-----------------------------------" + Style.RESET_ALL)
+    try:
+        while indice_actual < len(campos_requeridos):
+            campo_actual = campos_requeridos[indice_actual]
+            _mostrar_formulario_mantenimiento(equipo, campos_requeridos, datos_mantenimiento, indice_actual)
+
+            if campo_actual == "Tipo de Mantenimiento":
+                tipos_mantenimiento = ["Preventivo", "Correctivo", "Mejora"]
+                tipo_seleccionado = seleccionar_parametro(None, "Tipo de Mantenimiento", lista_opciones=tipos_mantenimiento)
+                if not tipo_seleccionado: # Si el usuario no selecciona nada
+                    continue
+                datos_mantenimiento[campo_actual] = tipo_seleccionado
+
+            elif campo_actual == "Observaciones":
+                observaciones = input(Fore.YELLOW + "Ingrese las Observaciones del mantenimiento: " + Style.RESET_ALL).strip()
+                if not observaciones:
+                    print(Fore.RED + "Las observaciones son obligatorias.")
+                    pausar_pantalla()
+                    continue
+                datos_mantenimiento[campo_actual] = observaciones
+            
+            indice_actual += 1
+
+        # Resumen final y confirmación
+        mostrar_encabezado("Resumen del Mantenimiento", color=Fore.CYAN)
+        print(f"  {'Equipo (Placa):'.ljust(25)}: {Fore.GREEN}{equipo.placa}{Style.RESET_ALL}")
+        for campo, valor in datos_mantenimiento.items():
+            print(f"  {campo.ljust(25)}: {Fore.GREEN}{valor}{Style.RESET_ALL}")
+        print(f"  {'Nuevo estado:'.ljust(25)}: {Fore.GREEN}En mantenimiento{Style.RESET_ALL}")
+        print(Fore.WHITE + "─" * 80 + Style.RESET_ALL)
         
         if not confirmar_con_placa(equipo.placa):
             return
 
+        # Actualización del equipo y registro del log
         equipo.estado_anterior = equipo.estado
         equipo.estado = "En mantenimiento"
         db_manager.update_equipo(equipo)
-        detalles = f"Tipo: {tipo_seleccionado}. Obs: {observaciones_mantenimiento}. Estado anterior: {equipo.estado_anterior}"
+        
+        detalles = f"Tipo: {datos_mantenimiento['Tipo de Mantenimiento']}. Obs: {datos_mantenimiento['Observaciones']}. Estado anterior: {equipo.estado_anterior}"
         registrar_movimiento_inventario(equipo.placa, "Mantenimiento", detalles, usuario)
-        print(Fore.GREEN + f"\n✅ Mantenimiento registrado. Estado cambiado a 'En mantenimiento'.")
+        
+        print(Fore.GREEN + f"\n✅ Mantenimiento registrado. El equipo {equipo.placa} ha cambiado su estado a 'En mantenimiento'.")
 
     except KeyboardInterrupt:
         print(Fore.CYAN + "\n🚫 Operación cancelada.")
