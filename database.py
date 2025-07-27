@@ -6,7 +6,6 @@ from colorama import Fore, Style
 
 # --- MODELOS DE DATOS ---
 class Equipo:
-    # MODIFICADO: Añadidos campos para renovación
     def __init__(self, placa: str, tipo: str, marca: str, modelo: str, serial: str,
                  estado: str = "Disponible", asignado_a: Optional[str] = None,
                  email_asignado: Optional[str] = None, observaciones: Optional[str] = None,
@@ -16,7 +15,8 @@ class Equipo:
                  motivo_devolucion: Optional[str] = None,
                  estado_anterior: Optional[str] = None,
                  renovacion_placa_asociada: Optional[str] = None,
-                 fecha_entrega_renovacion: Optional[str] = None):
+                 fecha_entrega_renovacion: Optional[str] = None,
+                 proveedor: Optional[str] = None):
         self.placa = placa
         self.tipo = tipo
         self.marca = marca
@@ -33,6 +33,7 @@ class Equipo:
         self.estado_anterior = estado_anterior
         self.renovacion_placa_asociada = renovacion_placa_asociada
         self.fecha_entrega_renovacion = fecha_entrega_renovacion
+        self.proveedor = proveedor
 
     def to_dict(self) -> Dict:
         return self.__dict__
@@ -88,7 +89,6 @@ class DatabaseManager:
 
     def create_tables(self):
         cursor = self.conn.cursor()
-        # MODIFICADO: Añadidos campos para renovación en la tabla equipos
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS equipos (
                 placa TEXT PRIMARY KEY, tipo TEXT NOT NULL, marca TEXT NOT NULL,
@@ -97,7 +97,7 @@ class DatabaseManager:
                 fecha_registro TEXT, fecha_devolucion_prestamo TEXT,
                 fecha_devolucion_proveedor TEXT, motivo_devolucion TEXT,
                 estado_anterior TEXT, renovacion_placa_asociada TEXT,
-                fecha_entrega_renovacion TEXT
+                fecha_entrega_renovacion TEXT, proveedor TEXT
             )
         ''')
         cursor.execute('''
@@ -130,6 +130,14 @@ class DatabaseManager:
                 UNIQUE(tipo, valor)
             )
         ''')
+        # --- NUEVA TABLA ---
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS proveedores (
+                nombre TEXT PRIMARY KEY,
+                placa_inicial TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1
+            )
+        ''')
         self.conn.commit()
 
     def add_missing_columns(self):
@@ -140,7 +148,8 @@ class DatabaseManager:
                 ('motivo_devolucion', 'TEXT'),
                 ('estado_anterior', 'TEXT'),
                 ('renovacion_placa_asociada', 'TEXT'),
-                ('fecha_entrega_renovacion', 'TEXT')
+                ('fecha_entrega_renovacion', 'TEXT'),
+                ('proveedor', 'TEXT')
             ],
             'usuarios': [
                 ('nombre_completo', 'TEXT'),
@@ -148,6 +157,9 @@ class DatabaseManager:
                 ('is_active', 'INTEGER NOT NULL DEFAULT 1')
             ],
             'parametros': [
+                ('is_active', 'INTEGER NOT NULL DEFAULT 1')
+            ],
+            'proveedores': [ # --- NUEVA COLUMNA ---
                 ('is_active', 'INTEGER NOT NULL DEFAULT 1')
             ]
         }
@@ -171,9 +183,9 @@ class DatabaseManager:
     # --- Métodos para Equipos ---
     def insert_equipo(self, equipo: Equipo):
         self.execute_query('''
-            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion, estado_anterior, renovacion_placa_asociada, fecha_entrega_renovacion)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion))
+            INSERT INTO equipos (placa, tipo, marca, modelo, serial, estado, asignado_a, email_asignado, observaciones, fecha_registro, fecha_devolucion_prestamo, fecha_devolucion_proveedor, motivo_devolucion, estado_anterior, renovacion_placa_asociada, fecha_entrega_renovacion, proveedor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (equipo.placa, equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a, equipo.email_asignado, equipo.observaciones, equipo.fecha_registro, equipo.fecha_devolucion_prestamo, equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.proveedor))
         self.commit()
 
     def get_all_equipos(self) -> List[Dict]:
@@ -185,14 +197,12 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def count_equipos_activos(self) -> int:
-        """Cuenta el número total de equipos activos."""
         query = "SELECT COUNT(placa) FROM equipos WHERE estado != 'Devuelto a Proveedor'"
         cursor = self.execute_query(query)
         result = cursor.fetchone()
         return result[0] if result else 0
 
     def get_equipos_activos_paginated(self, page: int = 1, page_size: int = 20) -> List[Dict]:
-        """Obtiene equipos activos de forma paginada y ordenada."""
         offset = (page - 1) * page_size
         query = """
             SELECT placa, tipo, estado, asignado_a
@@ -214,7 +224,6 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
         
     def get_new_equipos(self) -> List[Dict]:
-        """Obtiene equipos que solo tienen un movimiento en el log (su registro)."""
         query = """
             SELECT e.* FROM equipos e
             JOIN (
@@ -228,7 +237,6 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def get_available_not_new_equipos(self) -> List[Dict]:
-        """Obtiene equipos disponibles que ya han tenido movimientos."""
         query = """
             SELECT e.* FROM equipos e
             JOIN (
@@ -250,12 +258,12 @@ class DatabaseManager:
         self.execute_query('''
             UPDATE equipos SET tipo = ?, marca = ?, modelo = ?, serial = ?, estado = ?, asignado_a = ?,
             email_asignado = ?, observaciones = ?, fecha_devolucion_prestamo = ?, fecha_devolucion_proveedor = ?,
-            motivo_devolucion = ?, estado_anterior = ?, renovacion_placa_asociada = ?, fecha_entrega_renovacion = ?
+            motivo_devolucion = ?, estado_anterior = ?, renovacion_placa_asociada = ?, fecha_entrega_renovacion = ?, proveedor = ?
             WHERE placa = ?
         ''', (equipo.tipo, equipo.marca, equipo.modelo, equipo.serial, equipo.estado, equipo.asignado_a,
               equipo.email_asignado, equipo.observaciones, equipo.fecha_devolucion_prestamo,
               equipo.fecha_devolucion_proveedor, equipo.motivo_devolucion, equipo.estado_anterior, 
-              equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.placa))
+              equipo.renovacion_placa_asociada, equipo.fecha_entrega_renovacion, equipo.proveedor, equipo.placa))
         self.commit()
 
     def delete_equipo(self, placa: str):
@@ -275,7 +283,6 @@ class DatabaseManager:
         return result[0] if result else 0
         
     def get_log_by_placa(self, placa: str, limit: Optional[int] = None) -> List[Dict]:
-        """Obtiene el historial de movimientos para una placa, con un límite opcional."""
         query = 'SELECT * FROM log_inventario WHERE equipo_placa = ? ORDER BY fecha DESC'
         if limit:
             query += f' LIMIT {limit}'
@@ -302,13 +309,11 @@ class DatabaseManager:
         return dict(row) if row else None
 
     def get_last_log_by_action(self, placa: str, accion: str) -> Optional[Dict]:
-        """Obtiene el último registro de log para una placa y acción específicas."""
         cursor = self.execute_query('SELECT * FROM log_inventario WHERE equipo_placa = ? AND accion = ? ORDER BY fecha DESC LIMIT 1', (placa, accion))
         row = cursor.fetchone()
         return dict(row) if row else None
         
     def get_last_movimientos_by_user(self, usuario: str, limit: int = 10) -> List[Dict]:
-        """Obtiene los últimos movimientos de inventario realizados por un usuario específico."""
         query = """
             SELECT
                 li.fecha,
@@ -330,7 +335,6 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def get_movimientos_en_rango_de_fechas(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
-        """Obtiene todos los movimientos de inventario dentro de un rango de fechas."""
         query = """
             SELECT * FROM log_inventario
             WHERE fecha BETWEEN ? AND ?
@@ -398,17 +402,38 @@ class DatabaseManager:
         self.execute_query('DELETE FROM parametros WHERE tipo = ? AND valor = ?', (tipo, valor))
         self.commit()
         
+    # --- MÉTODOS PARA PROVEEDORES ---
+    def insert_proveedor(self, nombre: str, placa_inicial: str):
+        self.execute_query('INSERT INTO proveedores (nombre, placa_inicial, is_active) VALUES (?, ?, 1)', (nombre, placa_inicial))
+        self.commit()
+    
+    def get_all_proveedores(self) -> List[Dict]:
+        cursor = self.execute_query('SELECT * FROM proveedores ORDER BY nombre')
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_proveedor_by_name(self, nombre: str) -> Optional[Dict]:
+        cursor = self.execute_query('SELECT * FROM proveedores WHERE nombre = ?', (nombre,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+        
+    # --- NUEVA FUNCIÓN ---
+    def update_proveedor_status(self, nombre: str, new_status: bool):
+        self.execute_query('UPDATE proveedores SET is_active = ? WHERE nombre = ?', (int(new_status), nombre))
+        self.commit()
+
+    def delete_proveedor(self, nombre: str):
+        self.execute_query('DELETE FROM proveedores WHERE nombre = ?', (nombre,))
+        self.commit()
+
+    def is_proveedor_in_use(self, nombre: str) -> bool:
+        cursor = self.execute_query('SELECT 1 FROM equipos WHERE proveedor = ? LIMIT 1', (nombre,))
+        return cursor.fetchone() is not None
+
     def buscar_equipos(self, filtros: Dict) -> List[Dict]:
-        """
-        Busca equipos en la base de datos aplicando múltiples filtros.
-        Permite búsquedas parciales (LIKE) en campos de texto.
-        """
         query = "SELECT * FROM equipos WHERE 1=1"
         params = []
 
         for campo, valor in filtros.items():
-            # Asegurarse de que el campo es una columna válida para evitar inyección SQL
-            # Columnas permitidas para la búsqueda
             columnas_validas = [
                 'placa', 'tipo', 'marca', 'modelo', 'serial', 
                 'estado', 'asignado_a', 'email_asignado'

@@ -382,30 +382,125 @@ def generar_excel_log_sistema(usuario: str):
     finally:
         ui.pausar_pantalla()
 
+# --- NUEVA FUNCIÓN ---
 @requiere_permiso("configurar_sistema")
-def menu_configuracion_sistema(usuario: str):
+def gestionar_proveedores(usuario: str):
+    """Permite gestionar los proveedores y las iniciales de sus placas."""
     while True:
+        ui.mostrar_encabezado("Gestionar Proveedores")
+        
+        proveedores = db_manager.get_all_proveedores()
+        if not proveedores:
+            print(Fore.YELLOW + "No hay proveedores configurados.")
+        else:
+            for i, prov in enumerate(proveedores, 1):
+                # --- MODIFICACIÓN: Mostrar estado Activo/Inactivo ---
+                estado = Fore.GREEN + "[Activo]" if prov.get('is_active', 1) else Fore.RED + "[Inactivo]"
+                en_uso = Fore.RED + " (En uso)" if db_manager.is_proveedor_in_use(prov['nombre']) else ""
+                inicial_placa = f" (Inicial Placa: {prov['placa_inicial']})" if prov['placa_inicial'] else ""
+                print(f"{i}. {prov['nombre']}{inicial_placa} {estado}{en_uso}{Style.RESET_ALL}")
+        
+        print("\n")
+        # --- MODIFICACIÓN: Añadir nueva opción al menú ---
         opciones_menu = [
-            "Gestionar Tipos de Equipo", 
-            "Gestionar Marcas", 
-            "Gestionar Dominios de Correo", 
+            "Añadir nuevo proveedor",
+            "Activar/Inactivar un proveedor",
+            "Eliminar un proveedor",
             "Volver"
         ]
-        ui.mostrar_menu(opciones_menu, titulo="Configuración del Sistema")
+        ui.mostrar_menu(opciones_menu, titulo="Opciones")
         
-        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
-        
+        opcion = input(Fore.YELLOW + "Seleccione: " + Style.RESET_ALL).strip()
+
         if opcion == '1':
-            gestionar_parametros(usuario, 'tipo_equipo', 'Tipo de Equipo')
-        elif opcion == '2':
-            gestionar_parametros(usuario, 'marca_equipo', 'Marca')
+            try:
+                # --- Formulario interactivo ---
+                ui.mostrar_encabezado("Registrar Nuevo Proveedor")
+                print(Fore.CYAN + "💡 Ingrese los datos del nuevo proveedor.")
+                
+                nombre_proveedor = input(Fore.YELLOW + "Paso 1: Ingrese el nombre del nuevo proveedor: " + Style.RESET_ALL).strip().title()
+                if not nombre_proveedor:
+                    print(Fore.RED + "El nombre no puede estar vacío."); continue
+                
+                print(Fore.CYAN + "\n💡 Si este proveedor identifica sus equipos con un identificador que siempre empieza con las mismas iniciales, configúrelas a continuación.")
+                print(Fore.CYAN + "   De lo contrario, deje este campo en blanco.")
+                print(Fore.CYAN + "   Ejemplo: ML-12345 (Todas las placas llevan 'ML-' al inicio)")
+                
+                placa_inicial = input(Fore.YELLOW + "Paso 2: Ingrese las iniciales de la placa (opcional): " + Style.RESET_ALL).strip().upper()
+
+                print("\n" + Fore.CYAN + "--- Resumen para Confirmación ---")
+                print(f"Nombre del Proveedor: {nombre_proveedor}")
+                print(f"Iniciales de Placa:   {placa_inicial or 'Ninguna'}")
+                print("---------------------------------" + Style.RESET_ALL)
+
+                confirmacion_final = input(Fore.YELLOW + "¿Desea registrar este nuevo proveedor? (S/N): " + Style.RESET_ALL).strip().upper()
+                if confirmacion_final == 'S':
+                    db_manager.insert_proveedor(nombre_proveedor, placa_inicial)
+                    registrar_movimiento_sistema("Configuración", f"Añadido Proveedor: '{nombre_proveedor}'", usuario)
+                    print(Fore.GREEN + f"\n✅ Proveedor '{nombre_proveedor}' añadido con éxito.")
+                else:
+                    print(Fore.YELLOW + "\nOperación cancelada.")
+            except sqlite3.IntegrityError:
+                print(Fore.RED + f"\n❌ El proveedor '{nombre_proveedor}' ya existe.")
+            except KeyboardInterrupt:
+                print(Fore.CYAN + "\n🚫 Operación cancelada.")
+            finally:
+                ui.pausar_pantalla()
+
+        elif opcion == '2': # --- NUEVA LÓGICA ---
+            if not proveedores:
+                print(Fore.RED + "No hay proveedores para gestionar."); continue
+            
+            valor_a_gestionar = input(Fore.YELLOW + "Ingrese el nombre exacto del proveedor a activar/inactivar: " + Style.RESET_ALL).strip().title()
+            item_encontrado = db_manager.get_proveedor_by_name(valor_a_gestionar)
+
+            if item_encontrado:
+                es_activo_actualmente = item_encontrado.get('is_active', 1)
+                
+                if es_activo_actualmente and db_manager.is_proveedor_in_use(valor_a_gestionar):
+                    print(Fore.RED + f"\n❌ No se puede inactivar '{valor_a_gestionar}'. Está siendo utilizado por al menos un equipo.")
+                    ui.pausar_pantalla()
+                    continue 
+
+                nuevo_estado = not es_activo_actualmente
+                db_manager.update_proveedor_status(valor_a_gestionar, nuevo_estado)
+                accion_log = "activado" if nuevo_estado else "inactivado"
+                registrar_movimiento_sistema("Configuración", f"Proveedor '{valor_a_gestionar}' {accion_log}", usuario)
+                print(Fore.GREEN + f"\n✅ Proveedor '{valor_a_gestionar}' {accion_log} con éxito.")
+            else:
+                print(Fore.RED + f"El proveedor '{valor_a_gestionar}' no fue encontrado.")
+            ui.pausar_pantalla()
+
         elif opcion == '3':
-            gestionar_parametros(usuario, 'dominio_correo', 'Dominio de Correo Permitido')
+            if not proveedores:
+                print(Fore.RED + "No hay proveedores para eliminar."); continue
+
+            valor_a_eliminar = input(Fore.YELLOW + "Ingrese el nombre exacto del proveedor a ELIMINAR: " + Style.RESET_ALL).strip().title()
+            
+            if not db_manager.get_proveedor_by_name(valor_a_eliminar):
+                print(Fore.RED + f"El proveedor '{valor_a_eliminar}' no fue encontrado."); continue
+
+            if db_manager.is_proveedor_in_use(valor_a_eliminar):
+                print(Fore.RED + f"\n❌ No se puede eliminar '{valor_a_eliminar}'. Está siendo utilizado por al menos un equipo.")
+                ui.pausar_pantalla()
+                continue
+            
+            confirmacion = input(Fore.RED + f"⚠️ ¿Seguro de eliminar el proveedor '{valor_a_eliminar}'? Esta acción es irreversible. (Escriba 'SI'): " + Style.RESET_ALL).strip().upper()
+            if confirmacion == "SI":
+                db_manager.delete_proveedor(valor_a_eliminar)
+                registrar_movimiento_sistema("Configuración", f"Eliminado Proveedor: '{valor_a_eliminar}'", usuario)
+                print(Fore.GREEN + f"\n✅ Proveedor '{valor_a_eliminar}' eliminado con éxito.")
+            else:
+                print(Fore.YELLOW + "\nOperación de eliminación cancelada.")
+            ui.pausar_pantalla()
+
         elif opcion == '4':
             break
         else:
             print(Fore.RED + "Opción no válida.")
+            ui.pausar_pantalla()
 
+# --- FUNCIÓN MODIFICADA ---
 def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str):
     while True:
         ui.mostrar_encabezado(f"Gestionar {nombre_amigable}s")
@@ -436,17 +531,28 @@ def gestionar_parametros(usuario: str, tipo_parametro: str, nombre_amigable: str
         if accion == "add":
             try:
                 while True:
-                    nuevo_valor = input(Fore.YELLOW + f"Paso 1: Ingrese el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip().lower()
+                    nuevo_valor = input(Fore.YELLOW + f"Paso 1: Ingrese el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip()
                     if not nuevo_valor:
                         print(Fore.RED + "El valor no puede estar vacío.")
                         continue
                     
-                    if tipo_parametro == 'dominio_correo' and ('@' in nuevo_valor or '.' not in nuevo_valor):
-                        print(Fore.RED + "Formato de dominio inválido. Ingrese solo el dominio (ej: gmail.com).")
-                        continue
-
-                    confirmacion_valor = input(Fore.YELLOW + f"Paso 2: Confirme el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip().lower()
+                    # --- APLICAR FORMATO ---
+                    if tipo_parametro == 'dominio_correo':
+                        nuevo_valor = nuevo_valor.lower()
+                        if '@' in nuevo_valor or '.' not in nuevo_valor:
+                            print(Fore.RED + "Formato de dominio inválido. Ingrese solo el dominio (ej: gmail.com).")
+                            continue
+                    else:
+                        nuevo_valor = nuevo_valor.title()
                     
+                    confirmacion_valor = input(Fore.YELLOW + f"Paso 2: Confirme el nuevo {nombre_amigable}: " + Style.RESET_ALL).strip()
+                    
+                    # --- APLICAR FORMATO A LA CONFIRMACIÓN ---
+                    if tipo_parametro == 'dominio_correo':
+                        confirmacion_valor = confirmacion_valor.lower()
+                    else:
+                        confirmacion_valor = confirmacion_valor.title()
+
                     if nuevo_valor == confirmacion_valor:
                         break
                     else:

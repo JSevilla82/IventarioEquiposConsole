@@ -19,10 +19,10 @@ from gestion_reportes import (
     generar_excel_inventario, generar_excel_devueltos_proveedor,
     generar_excel_historico
 )
+# MODIFICACIÓN: Se importa la nueva función para gestionar proveedores
 from gestion_acceso import (
-    login, menu_usuarios, menu_configuracion_sistema,
-    cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS,
-    menu_ver_log_sistema
+    login, menu_usuarios, cambiar_contrasena_usuario, inicializar_admin_si_no_existe, ROLES_PERMISOS,
+    menu_ver_log_sistema, gestionar_parametros, gestionar_proveedores
 )
 from estadisticas import mostrar_estadisticas
 
@@ -101,16 +101,54 @@ def menu_gestion_inventario(usuario: str):
             print(Fore.RED + "Entrada no válida.")
             pausar_pantalla()
 
-def menu_gestion_acceso_sistema(usuario: str):
+# --- NUEVA FUNCIÓN ---
+def menu_configuracion_sistema(usuario: str):
+    """Muestra el menú para la configuración de parámetros del sistema."""
+    user_data = db_manager.get_user_by_username(usuario)
+    rol_actual = user_data['rol']
+
+    if "configurar_sistema" not in ROLES_PERMISOS.get(rol_actual, {}):
+        print(Fore.RED + "❌ No tiene permisos para acceder a la configuración del sistema.")
+        pausar_pantalla()
+        return
+
+    while True:
+        mostrar_encabezado("Módulo de Configuración del Sistema")
+        opciones_menu = [
+            "Gestionar Tipos de Equipo", 
+            "Gestionar Marcas", 
+            "Gestionar Dominios de Correo permitidos", # --- TEXTO MODIFICADO ---
+            "Gestionar Proveedores", # --- NUEVA OPCIÓN ---
+            "Volver al menú principal"
+        ]
+        mostrar_menu(opciones_menu, titulo="Parámetros del Sistema")
+        
+        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
+        
+        if opcion == '1':
+            gestionar_parametros(usuario, 'tipo_equipo', 'Tipo de Equipo')
+        elif opcion == '2':
+            gestionar_parametros(usuario, 'marca_equipo', 'Marca')
+        elif opcion == '3':
+            gestionar_parametros(usuario, 'dominio_correo', 'Dominio de Correo Permitido')
+        elif opcion == '4':
+            gestionar_proveedores(usuario) # --- LLAMADA A LA NUEVA FUNCIÓN ---
+        elif opcion == '5':
+            break
+        else:
+            print(Fore.RED + "Opción no válida.")
+            pausar_pantalla()
+
+# --- FUNCIÓN RENOMBRADA Y MODIFICADA ---
+def menu_gestion_accesos(usuario: str):
     user_data = db_manager.get_user_by_username(usuario)
     rol_actual = user_data['rol']
     
     while True:
-        mostrar_encabezado("Módulo de Acceso y Sistema")
+        mostrar_encabezado("Módulo de Gestión de Accesos")
 
         opciones_disponibles = []
         if "gestionar_usuarios" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestión de usuarios")
-        if "configurar_sistema" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Configuración del Sistema")
         if "ver_historico" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Ver Log de Actividad del Sistema")
         opciones_disponibles.append("Cambiar mi contraseña")
         opciones_disponibles.append("Volver al menú principal")
@@ -130,7 +168,6 @@ def menu_gestion_acceso_sistema(usuario: str):
             if 0 <= opcion_idx < len(opciones_disponibles):
                 opcion_texto = opciones_disponibles[opcion_idx]
                 if opcion_texto == "Gestión de usuarios": menu_usuarios(usuario)
-                elif opcion_texto == "Configuración del Sistema": menu_configuracion_sistema(usuario)
                 elif opcion_texto == "Ver Log de Actividad del Sistema": menu_ver_log_sistema(usuario)
                 elif opcion_texto == "Cambiar mi contraseña": cambiar_contrasena_usuario(usuario)
                 elif opcion_texto == "Volver al menú principal": break
@@ -151,6 +188,7 @@ def menu_accesos_rapidos():
     print("\n" + Fore.CYAN + "Escribe estos comandos en el menú principal para ir directamente a la función." + Style.RESET_ALL)
     pausar_pantalla()
 
+# --- FUNCIÓN PRINCIPAL MODIFICADA ---
 def menu_principal():
     inicializar_admin_si_no_existe()
     
@@ -185,7 +223,8 @@ def menu_principal():
             "Estadísticas de Inventario",
             "Gestión de Inventario",
             "Ver Inventario y Reportes",
-            "Gestión de Acceso y Sistema",
+            "Gestión de Accesos",
+            "Configuración del Sistema", # NUEVA OPCIÓN
             "Aprender Accesos Rápidos",
             "Salir"
         ]
@@ -197,7 +236,6 @@ def menu_principal():
         
         opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido (o 'x' para salir): " + Style.RESET_ALL).strip().lower()
         
-        # MODIFICACIÓN 2: Se elimina el atajo 'gmd' obsoleto
         shortcuts = {
             'rq': lambda: registrar_equipo(usuario_logueado),
             'gq': lambda: gestionar_equipos(usuario_logueado),
@@ -208,7 +246,7 @@ def menu_principal():
         }
         
         if opcion.lower() == 'x':
-            opcion = '6'
+            opcion = '7' # Ajustado al nuevo número de opciones
 
         if opcion in shortcuts:
             shortcuts[opcion]()
@@ -219,10 +257,12 @@ def menu_principal():
         elif opcion == '3':
             menu_ver_inventario(usuario_logueado)
         elif opcion == '4':
-            menu_gestion_acceso_sistema(usuario_logueado)
+            menu_gestion_accesos(usuario_logueado) # LLAMA A LA FUNCIÓN RENOMBRADA
         elif opcion == '5':
-            menu_accesos_rapidos()
+            menu_configuracion_sistema(usuario_logueado) # LLAMA A LA NUEVA FUNCIÓN
         elif opcion == '6':
+            menu_accesos_rapidos()
+        elif opcion == '7':
             break
         else:
             if opcion not in shortcuts:
