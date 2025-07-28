@@ -220,13 +220,13 @@ def menu_principal():
         mostrar_encabezado("Menú Principal")
         
         opciones_principales = [
-            "Estadísticas de Inventario",
-            "Gestión de Inventario",
-            "Ver Inventario y Reportes",
-            "Gestión de Accesos",
-            "Configuración del Sistema", # NUEVA OPCIÓN
-            "Aprender Accesos Rápidos",
-            "Salir"
+            "📊 Estadísticas de Inventario",
+            "📦 Gestión de Inventario",
+            "📋 Ver Inventario y Reportes",
+            "👤 Gestión de Accesos",
+            "⚙️ Configuración del Sistema",
+            "⚡ Aprender Accesesos Rápidos",
+            "🚪 Salir"
         ]
         
         mostrar_menu([], titulo="")
