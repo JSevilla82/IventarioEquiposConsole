@@ -1948,9 +1948,9 @@ def menu_busqueda_avanzada(usuario: str):
         ]
         mostrar_menu(opciones, titulo="Búsqueda Avanzada de Equipos")
         
-        opcion = input(Fore.YELLOW + "Seleccione un criterio de búsqueda (o 'x' para volver): " + Style.RESET_ALL).strip()
+        opcion = input(Fore.YELLOW + "Seleccione un criterio de búsqueda: " + Style.RESET_ALL).strip()
 
-        if opcion.lower() == 'x' or opcion == '6':
+        if opcion.lower() == '6':
             break
         
         criterios_map = {

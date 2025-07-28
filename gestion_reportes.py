@@ -22,9 +22,9 @@ def menu_ver_inventario(usuario: str):
         os.system('cls' if os.name == 'nt' else 'clear')
         opciones = [
             "Generar Reportes de Inventario en Excel",
-            "Ver últimos 20 movimientos",
+            "Últimos 20 movimientos del inventario",
             "Ver Inventario Actual en Consola",
-            "Volver al menú principal"
+            "Volver"
         ]
         mostrar_menu(opciones, titulo="Módulo de Visualización de Inventario")
         

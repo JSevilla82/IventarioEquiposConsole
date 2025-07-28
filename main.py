@@ -66,7 +66,7 @@ def menu_gestion_inventario(usuario: str):
             opciones_map[texto_devoluciones] = lambda: gestionar_devoluciones_proveedor(usuario)
             opciones_map[texto_renovaciones] = lambda: gestionar_renovaciones(usuario)
         
-        opciones_map["Volver al menú principal"] = None # Usamos None para indicar la acción de salir
+        opciones_map["Volver"] = None 
 
         # Convertimos las llaves del diccionario en una lista para poder enumerarlas
         opciones_disponibles = list(opciones_map.keys())
@@ -76,10 +76,7 @@ def menu_gestion_inventario(usuario: str):
             print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {texto_opcion}")
         print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
 
-        opcion_input = input(Fore.YELLOW + "Seleccione una opción (o 'x' para volver): " + Style.RESET_ALL).strip()
-        
-        if opcion_input.lower() == 'x':
-            break
+        opcion_input = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
             
         try:
             opcion_idx = int(opcion_input) - 1
@@ -119,7 +116,7 @@ def menu_configuracion_sistema(usuario: str):
             "Gestionar Marcas", 
             "Gestionar Dominios de Correo permitidos", # --- TEXTO MODIFICADO ---
             "Gestionar Proveedores", # --- NUEVA OPCIÓN ---
-            "Volver al menú principal"
+            "Volver"
         ]
         mostrar_menu(opciones_menu, titulo="Parámetros del Sistema")
         
@@ -151,17 +148,14 @@ def menu_gestion_accesos(usuario: str):
         if "gestionar_usuarios" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Gestión de usuarios")
         if "ver_historico" in ROLES_PERMISOS[rol_actual]: opciones_disponibles.append("Ver Log de Actividad del Sistema")
         opciones_disponibles.append("Cambiar mi contraseña")
-        opciones_disponibles.append("Volver al menú principal")
+        opciones_disponibles.append("Volver")
         
         mostrar_menu([], titulo="")
         for i, opcion in enumerate(opciones_disponibles, 1):
             print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
         print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
         
-        opcion = input(Fore.YELLOW + "Seleccione una opción (o 'x' para volver): " + Style.RESET_ALL).strip()
-        
-        if opcion.lower() == 'x':
-            break
+        opcion = input(Fore.YELLOW + "Seleccione una opción: " + Style.RESET_ALL).strip()
 
         try:
             opcion_idx = int(opcion) - 1
@@ -170,7 +164,7 @@ def menu_gestion_accesos(usuario: str):
                 if opcion_texto == "Gestión de usuarios": menu_usuarios(usuario)
                 elif opcion_texto == "Ver Log de Actividad del Sistema": menu_ver_log_sistema(usuario)
                 elif opcion_texto == "Cambiar mi contraseña": cambiar_contrasena_usuario(usuario)
-                elif opcion_texto == "Volver al menú principal": break
+                elif opcion_texto == "Volver": break
             else: print(Fore.RED + "Opción no válida.")
         except (ValueError, IndexError):
             print(Fore.RED + "Entrada no válida.")
@@ -188,88 +182,90 @@ def menu_accesos_rapidos():
     print("\n" + Fore.CYAN + "Escribe estos comandos en el menú principal para ir directamente a la función." + Style.RESET_ALL)
     pausar_pantalla()
 
-# --- FUNCIÓN PRINCIPAL MODIFICADA ---
+
+# --- FUNCIÓN PRINCIPAL MODIFICADA Y CORREGIDA ---
 def menu_principal():
     inicializar_admin_si_no_existe()
     
     ENVIRONMENT = os.getenv("ENVIRONMENT", "production") 
 
-    usuario_logueado = None
+    while True: # Bucle principal que mantiene el programa corriendo
+        usuario_logueado = None
+        import ui
 
-    import ui
+        ui.USUARIO_ACTUAL = None
+        ui.ROL_ACTUAL = None
+        ui.NOMBRE_COMPLETO_USUARIO = None
 
-    ui.USUARIO_ACTUAL = None
-    ui.ROL_ACTUAL = None
-    ui.NOMBRE_COMPLETO_USUARIO = None
-
-    if ENVIRONMENT == 'development':
-        usuario_logueado = "admin"
-    else:
-        while usuario_logueado is None:
-            usuario_logueado = login()
-            if usuario_logueado is None:
-                if input(Fore.RED + "¿Salir del programa? (S/N): " + Style.RESET_ALL).strip().upper() == 'S':
-                    return
-
-    user_data = db_manager.get_user_by_username(usuario_logueado)
-    ui.USUARIO_ACTUAL = usuario_logueado
-    ui.ROL_ACTUAL = user_data['rol']
-    ui.NOMBRE_COMPLETO_USUARIO = user_data.get('nombre_completo', usuario_logueado)
-
-    while True:
-        mostrar_encabezado("Menú Principal")
-        
-        opciones_principales = [
-            "📊 Estadísticas de Inventario",
-            "📦 Gestión de Inventario",
-            "📋 Ver Inventario y Reportes",
-            "👤 Gestión de Accesos",
-            "⚙️ Configuración del Sistema",
-            "⚡ Aprender Accesesos Rápidos",
-            "🚪 Salir"
-        ]
-        
-        mostrar_menu([], titulo="")
-        for i, opcion in enumerate(opciones_principales, 1):
-            print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
-        print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
-        
-        opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido (o 'x' para salir): " + Style.RESET_ALL).strip().lower()
-        
-        shortcuts = {
-            'rq': lambda: registrar_equipo(usuario_logueado),
-            'gq': lambda: gestionar_equipos(usuario_logueado),
-            'vm': lambda: menu_ver_ultimos_movimientos(usuario_logueado),
-            'ria': lambda: generar_excel_inventario(usuario_logueado),
-            'red': lambda: generar_excel_devueltos_proveedor(usuario_logueado),
-            'rhc': lambda: generar_excel_historico(usuario_logueado),
-        }
-        
-        if opcion.lower() == 'x':
-            opcion = '7' # Ajustado al nuevo número de opciones
-
-        if opcion in shortcuts:
-            shortcuts[opcion]()
-        elif opcion == '1':
-            mostrar_estadisticas(usuario_logueado)
-        elif opcion == '2':
-            menu_gestion_inventario(usuario_logueado)
-        elif opcion == '3':
-            menu_ver_inventario(usuario_logueado)
-        elif opcion == '4':
-            menu_gestion_accesos(usuario_logueado) # LLAMA A LA FUNCIÓN RENOMBRADA
-        elif opcion == '5':
-            menu_configuracion_sistema(usuario_logueado) # LLAMA A LA NUEVA FUNCIÓN
-        elif opcion == '6':
-            menu_accesos_rapidos()
-        elif opcion == '7':
-            break
+        if ENVIRONMENT == 'development':
+            usuario_logueado = "admin"
         else:
-            if opcion not in shortcuts:
-                print(Fore.RED + "\n❌ Opción no válida.")
+            while usuario_logueado is None:
+                usuario_logueado = login()
+                if usuario_logueado is None:
+                    if input(Fore.RED + "¿Salir del programa? (S/N): " + Style.RESET_ALL).strip().upper() == 'S':
+                        print(Fore.GREEN + "\n¡Gracias por usar el Sistema de Gestión de Inventario!")
+                        db_manager.close()
+                        print(Fore.GREEN + "\nConexión a la base de datos cerrada.")
+                        return # Termina la ejecución del programa
+
+        user_data = db_manager.get_user_by_username(usuario_logueado)
+        ui.USUARIO_ACTUAL = usuario_logueado
+        ui.ROL_ACTUAL = user_data['rol']
+        ui.NOMBRE_COMPLETO_USUARIO = user_data.get('nombre_completo', usuario_logueado)
+
+        while usuario_logueado: # Bucle de sesión de usuario
+            mostrar_encabezado("Menú Principal")
+            
+            opciones_principales = [
+                "📊 Estadísticas de Inventario",
+                "📦 Gestión de Inventario",
+                "📋 Ver Inventario y Reportes",
+                "👤 Gestión de Accesos",
+                "⚙️ Configuración del Sistema",
+                "⚡ Aprender Accesos Rápidos",
+                "↪️ Cerrar Sesión"
+            ]
+            
+            mostrar_menu([], titulo="")
+            for i, opcion in enumerate(opciones_principales, 1):
+                print(Fore.YELLOW + f"{i}." + Style.RESET_ALL + f" {opcion}")
+            print(Style.BRIGHT + Fore.WHITE + "═" * 80 + Style.RESET_ALL)
+            
+            opcion = input(Fore.YELLOW + "Seleccione un módulo o ingrese un acceso rápido: " + Style.RESET_ALL).strip().lower()
+            
+            shortcuts = {
+                'rq': lambda: registrar_equipo(usuario_logueado),
+                'gq': lambda: gestionar_equipos(usuario_logueado),
+                'vm': lambda: menu_ver_ultimos_movimientos(usuario_logueado),
+                'ria': lambda: generar_excel_inventario(usuario_logueado),
+                'red': lambda: generar_excel_devueltos_proveedor(usuario_logueado),
+                'rhc': lambda: generar_excel_historico(usuario_logueado),
+            }
+
+            if opcion in shortcuts:
+                shortcuts[opcion]()
+            elif opcion == '1':
+                mostrar_estadisticas(usuario_logueado)
+            elif opcion == '2':
+                menu_gestion_inventario(usuario_logueado)
+            elif opcion == '3':
+                menu_ver_inventario(usuario_logueado)
+            elif opcion == '4':
+                menu_gestion_accesos(usuario_logueado)
+            elif opcion == '5':
+                menu_configuracion_sistema(usuario_logueado)
+            elif opcion == '6':
+                menu_accesos_rapidos()
+            elif opcion == '7':
+                print(Fore.GREEN + "\nCerrando sesión...")
+                usuario_logueado = None # Rompe el bucle de sesión y vuelve al login
                 pausar_pantalla()
-    
-    print(Fore.GREEN + "\n¡Gracias por usar el Sistema de Gestión de Inventario!")
+            else:
+                if opcion not in shortcuts:
+                    print(Fore.RED + "\n❌ Opción no válida.")
+                    pausar_pantalla()
+
 
 if __name__ == "__main__":
     try:
