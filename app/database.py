@@ -5,6 +5,9 @@ from datetime import datetime
 from colorama import Fore, Style
 
 class DatabaseManager:
+    """
+    Gestiona todas las operaciones de la base de datos SQLite de forma centralizada.
+    """
     def __init__(self, db_name: str):
         self.db_name = db_name
         self.conn = None
@@ -12,6 +15,7 @@ class DatabaseManager:
         self.create_tables()
 
     def connect(self):
+        """Conecta a la base de datos y configura el modo de fila."""
         try:
             self.conn = sqlite3.connect(self.db_name)
             self.conn.row_factory = sqlite3.Row
@@ -20,40 +24,67 @@ class DatabaseManager:
             print(Fore.RED + f"❌ Error al conectar a la base de datos: {e}" + Style.RESET_ALL); exit()
 
     def close(self):
+        """Cierra la conexión a la base de datos."""
         if self.conn: self.conn.close()
 
     def execute_query(self, query: str, params: tuple = ()) -> sqlite3.Cursor:
+        """Ejecuta una consulta SQL."""
         cursor = self.conn.cursor()
         cursor.execute(query, params)
         return cursor
 
     def commit(self):
+        """Confirma los cambios en la base de datos."""
         self.conn.commit()
 
     def create_tables(self):
+        """Crea las tablas de la base de datos si no existen."""
         cursor = self.conn.cursor()
+        
         cursor.execute('CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, nombre_rol TEXT UNIQUE NOT NULL)')
+        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY, nombre_completo TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
                 username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, fecha_registro TEXT NOT NULL,
                 cambio_clave_requerido INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1
             )''')
+        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_roles (
                 user_id INTEGER, role_id INTEGER, PRIMARY KEY (user_id, role_id),
                 FOREIGN KEY (user_id) REFERENCES users (id), FOREIGN KEY (role_id) REFERENCES roles (id)
             )''')
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS login_logs (
                 id INTEGER PRIMARY KEY, user_id INTEGER, timestamp TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )''')
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS log_sistema (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, accion TEXT NOT NULL,
                 detalles TEXT NOT NULL, usuario TEXT NOT NULL, fecha TEXT NOT NULL
             )''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS parametros (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo TEXT NOT NULL,
+                valor TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(tipo, valor)
+            )''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS proveedores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT UNIQUE NOT NULL,
+                placa_inicial TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1
+            )''')
+        
         self.commit()
         self.inicializar_roles()
 
@@ -135,6 +166,72 @@ class DatabaseManager:
     def get_log_sistema_paginated(self, page: int, page_size: int) -> Tuple[List[Dict], int]:
         offset = (page - 1) * page_size
         total_rows = self.execute_query("SELECT COUNT(id) FROM log_sistema").fetchone()[0]
-        total_pages = (total_rows + page_size - 1) // page_size
+        total_pages = (total_rows + page_size - 1) // page_size if total_rows > 0 else 1
         logs = self.execute_query("SELECT * FROM log_sistema ORDER BY fecha DESC LIMIT ? OFFSET ?", (page_size, offset)).fetchall()
         return [dict(row) for row in logs], total_pages
+        
+    def get_parametros_por_tipo(self, tipo: str) -> List[Dict]:
+        cursor = self.execute_query("SELECT * FROM parametros WHERE tipo = ? ORDER BY valor", (tipo,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add_parametro(self, tipo: str, valor: str) -> bool:
+        try:
+            self.execute_query('INSERT INTO parametros (tipo, valor) VALUES (?, ?)', (tipo, valor))
+            self.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def update_parametro(self, parametro_id: int, nuevo_valor: str) -> bool:
+        try:
+            self.execute_query('UPDATE parametros SET valor = ? WHERE id = ?', (nuevo_valor, parametro_id))
+            self.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def update_parametro_status(self, parametro_id: int, is_active: bool):
+        self.execute_query('UPDATE parametros SET is_active = ? WHERE id = ?', (int(is_active), parametro_id))
+        self.commit()
+
+    def delete_parametro(self, parametro_id: int):
+        self.execute_query('DELETE FROM parametros WHERE id = ?', (parametro_id,))
+        self.commit()
+
+    def get_all_proveedores(self) -> List[Dict]:
+        cursor = self.execute_query("SELECT * FROM proveedores ORDER BY nombre")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add_proveedor(self, nombre: str, placa_inicial: str) -> bool:
+        try:
+            self.execute_query('INSERT INTO proveedores (nombre, placa_inicial) VALUES (?, ?)', (nombre, placa_inicial))
+            self.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def update_proveedor(self, proveedor_id: int, nuevo_nombre: str, nueva_placa: str) -> bool:
+        try:
+            self.execute_query('UPDATE proveedores SET nombre = ?, placa_inicial = ? WHERE id = ?', (nuevo_nombre, nueva_placa, proveedor_id))
+            self.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def update_proveedor_status(self, proveedor_id: int, is_active: bool):
+        self.execute_query('UPDATE proveedores SET is_active = ? WHERE id = ?', (int(is_active), proveedor_id))
+        self.commit()
+
+    def delete_proveedor(self, proveedor_id: int):
+        self.execute_query('DELETE FROM proveedores WHERE id = ?', (proveedor_id,))
+        self.commit()
+
+    def is_parametro_in_use(self, parametro_id: int) -> bool:
+        # Lógica futura para verificar si un equipo usa este parámetro.
+        # SELECT 1 FROM equipos WHERE tipo_id = ? OR marca_id = ? LIMIT 1
+        return False
+
+    def is_proveedor_in_use(self, proveedor_id: int) -> bool:
+        # Lógica futura para verificar si un equipo usa este proveedor.
+        # SELECT 1 FROM equipos WHERE proveedor_id = ? LIMIT 1
+        return False

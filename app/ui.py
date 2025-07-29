@@ -93,3 +93,28 @@ def mostrar_log_sistema(logs: List[Dict]):
             if len(detalles) > 40: detalles = detalles[:37] + "..."
             print(f"{log['fecha']:<22} {log['usuario']:<20} {log['accion']:<25} {detalles}")
     print(Fore.CYAN + "-" * 90 + Style.RESET_ALL)
+
+def mostrar_tabla_parametros(titulo: str, items: List[Dict], es_proveedor=False):
+    """Muestra una tabla genérica y estilizada para parámetros y proveedores."""
+    # Define las cabeceras dinámicamente
+    if es_proveedor:
+        print(f"{Fore.CYAN}{'NOMBRE':<30} {'INICIALES PLACA':<20} {'ESTADO'}{Style.RESET_ALL}")
+        print(Fore.CYAN + "-" * 70 + Style.RESET_ALL)
+    else:
+        print(f"{Fore.CYAN}{'VALOR':<50} {'ESTADO'}{Style.RESET_ALL}")
+        print(Fore.CYAN + "-" * 70 + Style.RESET_ALL)
+
+    if not items:
+        print(Fore.YELLOW + "No hay elementos configurados.")
+    else:
+        for item in items:
+            estado = (Fore.GREEN + "Activo") if item['is_active'] else (Fore.RED + "Inactivo")
+            if es_proveedor:
+                nombre = item.get('nombre', 'N/A')
+                placa = item.get('placa_inicial') or 'N/A'
+                print(f"{nombre:<30} {placa:<20} {estado}{Style.RESET_ALL}")
+            else:
+                valor = item.get('valor', 'N/A')
+                print(f"{valor:<50} {estado}{Style.RESET_ALL}")
+    
+    print(Fore.CYAN + "-" * 70 + Style.RESET_ALL)
