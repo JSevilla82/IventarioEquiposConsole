@@ -1,12 +1,22 @@
 # app/config.py
-ROLES = ["Administrador", "Gestor", "Visualizador"]
+
+# --- Roles y Permisos ---
+ROLES = ["Administrador", "Técnico", "Consulta"]
 
 ROLES_PERMISOS = {
     "Administrador": {
         "gestionar_usuarios",
-        "ver_log_sistema",
-        "configurar_sistema"
+        "configurar_sistema",
+        "registrar_equipo",
+        "ver_inventario_completo",
+        "generar_reportes"
     },
-    "Gestor": {},
-    "Visualizador": {}
+    "Técnico": {
+        "registrar_equipo",
+        "ver_inventario_asignado",
+        "actualizar_estado_equipo"
+    },
+    "Consulta": {
+        "ver_inventario_completo"
+    }
 }

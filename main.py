@@ -14,7 +14,19 @@ def main():
     load_dotenv()
     ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 
-    db = DatabaseManager('inventario_v2.db')
+    # --- NUEVA LÓGICA PARA LA BASE DE DATOS ---
+    DB_PATH = os.getenv("DB_PATH", "app/data")
+    DB_NAME = os.getenv("DB_NAME", "inventario.db")
+    
+    # Asegurarse de que el directorio de la base de datos exista
+    if not os.path.exists(DB_PATH):
+        os.makedirs(DB_PATH)
+        print(Fore.CYAN + f"Directorio '{DB_PATH}' creado.")
+
+    db_full_path = os.path.join(DB_PATH, DB_NAME)
+    # --- FIN DE LA NUEVA LÓGICA ---
+
+    db = DatabaseManager(db_full_path)
     admin_creado, admin_pass = db.inicializar_admin_si_no_existe()
 
     while True:

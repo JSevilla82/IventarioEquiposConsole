@@ -5,6 +5,7 @@ from . import ui
 from .database import DatabaseManager
 from .modules.gestion_accesos import registrar_nuevo_usuario, gestionar_usuarios_existentes
 from .modules.configuracion import menu_configuracion_sistema
+from .modules.gestion_activos import registrar_nuevo_activo
 from .auth import cambiar_contrasena_usuario
 from .config import ROLES_PERMISOS
 
@@ -47,6 +48,19 @@ def _ver_log_sistema(db: DatabaseManager, usuario_logueado: dict):
             ui.pausar_pantalla()
             break
 
+def menu_gestion_activos(db: DatabaseManager, usuario_logueado: dict):
+    """Muestra el menú para la gestión de activos."""
+    while True:
+        ui.mostrar_encabezado("Módulo de Gestión de Activos", usuario_logueado=usuario_logueado)
+        opciones = ["Registrar Nuevo Activo", "Volver al Menú Principal"]
+        ui.mostrar_menu(opciones)
+        opcion = ui.solicitar_input(Fore.YELLOW + "Seleccione una opción: ")
+
+        if opcion == '1': registrar_nuevo_activo(db, usuario_logueado)
+        elif opcion == '2': break
+        else: print(Fore.RED + "Opción no válida."); ui.pausar_pantalla()
+
+
 def mostrar_menu_principal(db: DatabaseManager, usuario_logueado: dict):
     """Bucle principal que muestra el menú después de un inicio de sesión exitoso."""
     rol_actual = usuario_logueado['nombre_rol']
@@ -56,10 +70,11 @@ def mostrar_menu_principal(db: DatabaseManager, usuario_logueado: dict):
         
         opciones = {}
         # Menú dinámico basado en permisos
-        opciones['1'] = ("👤 Gestión de Accesos", menu_gestion_accesos)
+        opciones['1'] = ("💻 Activos de la Organización", menu_gestion_activos)
+        opciones['2'] = ("👤 Gestión de Accesos", menu_gestion_accesos)
         
         if "configurar_sistema" in ROLES_PERMISOS.get(rol_actual, {}):
-            opciones['2'] = ("⚙️  Configuración del Sistema", menu_configuracion_sistema)
+            opciones['3'] = ("⚙️  Configuración del Sistema", menu_configuracion_sistema)
         
         opciones[str(len(opciones) + 1)] = ("↪️  Cerrar Sesión", None)
 
